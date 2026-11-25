@@ -53,16 +53,32 @@ Tirar foto (câmera), escolher da galeria, pré-visualizar, excluir e desfazer e
 
 ## Backend / persistência
 
-O app chama:
+O app suporta dois modos, escolhidos automaticamente:
+
+1. **Supabase (produção):** se `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estiverem preenchidos, `src/App.tsx` chama o PostgREST diretamente na tabela `records`.
+2. **Local (dev):** sem essas variáveis, um plugin do Vite (`vite.config.ts`) responde `POST /actions` e grava em `.data/db.json` (ignorado pelo Git).
+
+### Configurando o Supabase
+
+1. No projeto Supabase, abra **SQL Editor** e rode o arquivo [`supabase/migrations/20261125000000_records.sql`](supabase/migrations/20261125000000_records.sql). Ele cria a tabela `records` (`id`, `collection`, `value jsonb`) e políticas RLS.
+2. Copie `.env.example` para `.env.local` e preencha:
+
+```env
+VITE_SUPABASE_URL=https://SEU-PROJETO.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOi...
+```
+
+3. Rode `npm run dev` (ou `npm run build`). O status no login deve mostrar **Conectado**.
+
+A chave `anon` é pública por design; o controle de acesso (gerência vs. funcionário) é feito na interface. As políticas RLS do SQL acima liberam leitura/escrita para `anon` — se quiser restringir, troque `using (true)` por regras com `auth.uid()` e implemente login via Supabase Auth.
+
+### Contrato antigo (ainda usado no modo local)
 
 ```
 POST actions
 { "action": "records.list" | "records.create" | "records.replace" | "records.delete", "args": { "collection": "...", ... } }
+→ { "data": ... }
 ```
-
-com resposta `{ "data": ... }`.
-
-Para `npm run dev` e `npm run preview`, este repositório inclui um plugin do Vite (`vite.config.ts`) que responde a essa rota e grava em `.data/db.json` (ignorado pelo Git). Em produção, substitua esse endpoint pelo seu backend — o front-end não muda, pois a URL é relativa (`actions`).
 
 Coleções usadas: `dojo_entries`, `dojo_chat`, `dojo_submissions`, `dojo_temps`, `dojo_shifts`, `dojo_action_plans`, `dojo_handovers`, `dojo_shortages`, `dojo_weekly`, `dojo_expiries`, `dojo_maintenance`, `dojo_credentials`, `checklists`, `checklist_items`, `task_templates`.
 
@@ -70,10 +86,13 @@ Coleções usadas: `dojo_entries`, `dojo_chat`, `dojo_submissions`, `dojo_temps`
 
 ```
 index.html
-src/main.tsx      # ponto de entrada
-src/App.tsx       # aplicação (estado, permissões, chat, fotos, módulos)
-src/index.css     # tokens de tema + estilos (Tailwind v4)
-vite.config.ts    # Vite + React + Tailwind + backend local /actions
+.env.example                         # modelo das variáveis Supabase
+src/main.tsx                          # ponto de entrada
+src/App.tsx                           # aplicação + adaptador Supabase/local
+src/index.css                         # tokens de tema + estilos (Tailwind v4)
+src/vite-env.d.ts                     # tipagem das variáveis de ambiente
+vite.config.ts                        # Vite + React + Tailwind + backend local /actions
+supabase/migrations/...records.sql    # tabela records + RLS
 tsconfig.json
 ```
 
