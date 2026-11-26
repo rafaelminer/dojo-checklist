@@ -425,7 +425,7 @@ export default function App(){
   const stationQrCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const chatScrollRef=useRef<HTMLDivElement|null>(null);
   const chatEndRef=useRef<HTMLDivElement|null>(null);
-  const appLink = typeof window!=="undefined" ? window.location.href.split("#")[0] : "Dojo Checklist";
+  const appLink = typeof window!=="undefined" ? `${window.location.origin}${window.location.pathname}` : "Dojo Checklist";
   const lastTempKey = useRef("");
   const tempTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draft,setDraft]=useState("");
