@@ -649,6 +649,28 @@ export default function App(){
     setModuleSaving(false);
   }
   useEffect(()=>{ reloadRecords().then(()=>{ setOfflineMode(false); }).catch(()=>{ setOfflineMode(true); }).finally(()=>setLoading(false)); },[]);
+  // Catálogo de itens no backend: usado pelo resumo diário automático.
+  useEffect(()=>{
+    if(!authUser) return;
+    let cancelled = false;
+    (async()=>{
+      try{
+        const list = await api("records.list",{collection:"dojo_item_catalog",limit:500});
+        if(cancelled) return;
+        const have = new Set((list.records||[]).map((r:any)=>r.value?.id));
+        const catalog = [
+          ...ALL_ITEMS.map(i=>({id:i.id,name:i.name,section:String(i.section||"")})),
+          ...WEEKLY_ITEMS.map(i=>({id:i.id,name:i.name,section:"Limpeza Semanal"})),
+          ...MAINT_ITEMS.map(i=>({id:i.id,name:i.name,section:"Manutenção"})),
+        ];
+        for(const item of catalog){
+          if(cancelled) return;
+          if(!have.has(item.id)) await api("records.create",{collection:"dojo_item_catalog",value:item});
+        }
+      }catch{}
+    })();
+    return ()=>{ cancelled = true; };
+  },[authUser]);
 
   useEffect(()=>{
     if(!selected) return;

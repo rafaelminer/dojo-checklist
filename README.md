@@ -47,6 +47,22 @@ A gerência pode **editar login e senha** de qualquer pessoa, inclusive da equip
 - Botões de aprovar/pedir correção aparecem apenas na conversa 1:1 com a Gerência.
 - Funcionários cadastrados com grupo entram automaticamente no grupo correspondente.
 
+## Mensagens automáticas diárias
+
+Um cron da Vercel (`vercel.json`, todo dia às 12:00 UTC = 09:00 de Brasília) chama `/api/daily` e envia pelo chat:
+
+- **Lembrete diário** para cada pessoa e para os grupos Cozinha/Copa/Quiosque.
+- **Produção de ontem** para cada pessoa, com os itens feitos e quem mais fez os mesmos itens.
+
+O resumo usa o catálogo de itens sincronizado no Supabase (`dojo_item_catalog`). Ambos os envios são deduplicados por data, então não repetem se o dia já foi processado. Cada mensagem também dispara notificação push.
+
+A função exige o header `Authorization: Bearer <CRON_SECRET>`; configure `CRON_SECRET` na Vercel. Para testar manualmente:
+
+```bash
+curl -X POST https://dojo-checklist.vercel.app/api/daily \
+  -H "Authorization: Bearer $CRON_SECRET"
+```
+
 ## Notificações push
 
 O app registra um service worker (`public/sw.js`) e envia notificações reais quando uma mensagem chega, mesmo com o app fechado.
