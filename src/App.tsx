@@ -1638,7 +1638,7 @@ export default function App(){
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
         <span className="hidden sm:grid w-10 h-10 rounded-full place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="font-extrabold tracking-tight text-[15px] sm:text-[19px] truncate">Olá, {authUser}{isManager && selected && selected!==authUser ? ` · ${selected}` : ""}</div>
+          <div className="font-extrabold tracking-tight text-[15px] sm:text-[19px] truncate">Olá, {authUser}</div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
