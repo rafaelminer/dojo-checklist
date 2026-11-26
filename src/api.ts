@@ -1,6 +1,21 @@
 // Adaptador de persistência: Supabase (produção) ou backend local do Vite.
 
 export async function api(action: string, args: any) {
+  const actionsUrl = String(import.meta.env.VITE_ACTIONS_URL || "");
+  if (actionsUrl) {
+    const res = await fetch(actionsUrl, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-dojo-key": String(import.meta.env.VITE_DOJO_API_SECRET || ""),
+      },
+      body: JSON.stringify({ action, args }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) throw new Error(json.error || `Falha na conexão (${res.status})`);
+    return json.data;
+  }
+
   const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
   const supabaseKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || "");
 
