@@ -81,6 +81,9 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Passagem de turno automática:** botão “Puxar pendências” preenche o recado com pendências, faltas, temperaturas fora da faixa, tarefas atrasadas e não feitos.
 - **Confirmação de leitura:** mensagens da gerência podem ser confirmadas pelo destinatário; a gerência vê “Lido por …”.
 - O chat carrega até 1000 mensagens (antes eram só 100).
+- **PDF:** botão “PDF” gera o relatório em A4 (biblioteca carregada sob demanda).
+- **Navegação do dashboard:** atalhos Conferência / Equipe / Qualidade rolam até a área correspondente.
+- **Senhas com hash:** funcionários cadastrados agora têm Senha SHA-256; cadastros antigos em texto puro continuam funcionando por compatibilidade.
 
 ## Notificações push
 
