@@ -442,6 +442,7 @@ export default function App(){
   const mediaRecorderRef=useRef<MediaRecorder|null>(null);
   const audioChunksRef=useRef<Blob[]>([]);
   const recordStartRef=useRef(0);
+  const readMarkedRef=useRef("");
   const [occurrenceOpen,setOccurrenceOpen]=useState(false);
   const [occurrenceText,setOccurrenceText]=useState("");
   const [occurrenceSending,setOccurrenceSending]=useState(false);
@@ -1635,6 +1636,20 @@ export default function App(){
     if(conversation.startsWith("grupo:")) return chat.filter(m=>m.value.profile===conversation);
     return messagesForPerson(conversation);
   },[chat,conversation,authUser]);
+  useEffect(()=>{
+    if(tab!=="chat" || !conversation || !authUser) return;
+    const pending = convoMessages.filter(m=>m.value.sender==="Gerência" && !reads.some(r=>r.value.messageId===m.id && r.value.profile===authUser));
+    if(!pending.length) return;
+    const key = `${conversation}|${pending.map(m=>m.id).join(",")}`;
+    if(readMarkedRef.current===key) return;
+    readMarkedRef.current = key;
+    (async()=>{
+      try{
+        for(const m of pending) await api("records.create",{collection:"dojo_chat_reads",value:{messageId:m.id,profile:authUser,at:nowTime()}});
+        await reloadAux();
+      }catch{ readMarkedRef.current=""; }
+    })();
+  },[tab,conversation,convoMessages,reads,authUser]);
   const visibleMessageCount = useMemo(()=>{
     if(!authUser) return 0;
     const ids = new Set<string>();
@@ -1879,14 +1894,6 @@ export default function App(){
     if(cur.status==="Não feito"){ void resolveActionPlanForItem(match.id); }
     setQuickEntryOpen(false); setQuickEntryText("");
     setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
-  }
-  async function confirmRead(messageId:string){
-    if(!authUser) return;
-    if(reads.some(r=>r.value.messageId===messageId && r.value.profile===authUser)) return;
-    try{
-      await api("records.create",{collection:"dojo_chat_reads",value:{messageId,profile:authUser,at:nowTime()}});
-      await reloadAux();
-    }catch{}
   }
   function startVoice(){
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -2336,7 +2343,6 @@ export default function App(){
                 {isMine && (reads.filter(r=>r.value.messageId===m.id).length>0
                   ? <span className="text-[11px] font-bold text-[#075E54]">Lido por {Array.from(new Set(reads.filter(r=>r.value.messageId===m.id).map(r=>r.value.profile))).join(", ")}</span>
                   : <span className="text-[12px] font-bold text-[#53BDEB]" aria-label="Entregue">✓✓</span>)}
-                {m.value.sender==="Gerência" && !isMine && !reads.some(r=>r.value.messageId===m.id && r.value.profile===authUser) && <button onClick={()=>void confirmRead(m.id)} className="text-[11px] font-bold text-[#075E54] underline">Confirmar leitura</button>}
                 {m.value.sender==="Gerência" && !isMine && reads.some(r=>r.value.messageId===m.id && r.value.profile===authUser) && <span className="text-[11px] font-bold text-[#075E54]">✓ Lido</span>}
               </div>
             </div>
