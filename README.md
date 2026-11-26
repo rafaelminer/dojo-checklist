@@ -63,6 +63,15 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
   -H "Authorization: Bearer $CRON_SECRET"
 ```
 
+## Recursos de operação
+
+- **Tarefas avulsas:** gerência cria com responsável, data e hora limite; aparece no checklist da pessoa; vencida fica vermelha e o cron diário avisa responsável e gerência.
+- **Logbook da gerência:** registro estruturado por turno (ocorrências, decisões, visitas).
+- **Treinamentos:** atribuição por pessoa, conclusão pelo funcionário e aprovação pela gerência.
+- **Instruções padrão dos itens:** gerência edita em Módulos → “Instruções padrão dos itens”; o texto aparece no card do item.
+- **Próximas pendências:** no topo do dashboard da gerência.
+- **Alerta de item crítico:** itens de Limpeza/Organização/temperatura marcados como “Não feito” avisam gerência e grupo automaticamente.
+
 ## Notificações push
 
 O app registra um service worker (`public/sw.js`) e envia notificações reais quando uma mensagem chega, mesmo com o app fechado.
