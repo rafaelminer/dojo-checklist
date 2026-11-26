@@ -80,7 +80,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **QR por estação:** gerência gera um QR por pessoa/posto; ao escanear, o app abre com o login preenchido.
 - **Compartilhar relatório:** usa o menu de compartilhar do celular (WhatsApp incluído), com download como fallback.
 - **Passagem de turno automática:** botão “Puxar pendências” preenche o recado com pendências, faltas, temperaturas fora da faixa, tarefas atrasadas e não feitos.
-- **Confirmação de leitura:** mensagens da gerência podem ser confirmadas pelo destinatário; a gerência vê “Lido por …”.
+- **Confirmação de leitura:** ao abrir uma conversa, todas as mensagens da gerência são marcadas como lidas automaticamente; a gerência vê “Lido por …”.
 - O chat carrega até 1000 mensagens (antes eram só 100).
 - **PDF:** botão “PDF” gera o relatório em A4 (biblioteca carregada sob demanda).
 - **Navegação do dashboard:** atalhos Conferência / Equipe / Qualidade rolam até a área correspondente.
