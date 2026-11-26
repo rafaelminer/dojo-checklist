@@ -187,6 +187,12 @@ byProfile["Tayara"]=[...kioskProdTayara,...kioskNoiteNovo];
 ["Paola","Ricardo"].forEach(p=>byProfile[p]=[...copa,...limpeza,...organizacao]);
 byProfile["Gerência"]=[...hot,...blocoA,...blocoB,...quente,...quiosque,...copa,...limpeza,...organizacao].filter((v,i,a)=>a.findIndex(x=>x.id===v.id)===i);
 const ALL_ITEMS:Item[] = [...hot,...blocoA,...blocoB,...quente,...quiosque,...copa,...limpeza,...organizacao].filter((v,i,a)=>a.findIndex(x=>x.id===v.id)===i);
+// Itens que precisam ser feitos antes de outros (ordem do processo).
+const ITEM_DEPENDENCIES: Record<string,string[]> = {
+  "a-5": ["a-8"],   // Salmão Maki depende do Salmão limpo
+  "a-16": ["a-15"], // Nigiri finalizado depende da limpeza/preparo do pescado
+  "a-17": ["a-9"],  // Nigiri de camarão depende do camarão descascado
+};
 const SECTIONS: Section[] = ["Produção","Limpeza","Organização"];
 const WEEKLY_ITEMS: { id: string; group: string; name: string }[] = [
   { id: "sem-coz-1", group: "Cozinha", name: "Limpar câmara fria por dentro" },
@@ -965,6 +971,26 @@ export default function App(){
     setMsg("Relatório do dia gerado para baixar.");
   }
 
+  function pendingDeps(itemId:string):Item[]{
+    return (ITEM_DEPENDENCIES[itemId]||[])
+      .filter(id=>entryFor(id).status!=="Feito")
+      .map(id=>ALL_ITEMS.find(i=>i.id===id))
+      .filter((i):i is Item=>!!i);
+  }
+  function suggestedFor(item:Item):{value:number;days:number}|null{
+    const wd = new Date(`${date}T12:00:00`).getDay();
+    const values:number[] = [];
+    [7,14,21,28].forEach(n=>{
+      const d = addDays(date,-n);
+      if(new Date(`${d}T12:00:00`).getDay()!==wd) return;
+      const raw = entries[`${selected}|${d}|${item.id}`]?.value;
+      if(raw?.status!=="Feito") return;
+      const v = parseFloat(String(raw.feito||"").replace(",","."));
+      if(Number.isFinite(v)) values.push(v);
+    });
+    if(!values.length) return null;
+    return { value:Math.round(values.reduce((a,b)=>a+b,0)/values.length), days:values.length };
+  }
   function entryFor(id:string):Entry{
     const raw = entries[`${selected}|${date}|${id}`]?.value;
     if(!raw) return {profile:selected||"",date,itemId:id,status:"",feito:"",justificativa:""};
@@ -1269,6 +1295,10 @@ export default function App(){
   }
   async function setStatus(item:Item,status:"Feito"|"Não feito"){
     if(isManager){ setMsg("Modo conferência: a Gerência só confere o checklist."); return; }
+    if(status==="Feito"){
+      const deps = pendingDeps(item.id);
+      if(deps.length){ setMsg(`Antes de ${item.name}, marque como Feito: ${deps.map(d=>d.name).join(", ")}.`); return; }
+    }
     const cur=entryFor(item.id);
     if(cur.status===""){ void ensureShiftStarted(); }
     if(cur.status===status){
@@ -1669,6 +1699,33 @@ export default function App(){
     if(!selected) return [];
     return activeSections.flatMap(sec=>countsForSection(sec).list.map(item=>({item,sec,status:entryFor(item.id).status}))).filter(x=>x.status!=="Feito").slice(0,5);
   },[selected,date,entries,activeSections]);
+  const sharedProduction = useMemo(()=>{
+    if(!selected) return [] as {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}[];
+    const mine = new Set((byProfile[selected]||[]).map(i=>i.id));
+    return Object.keys(byProfile)
+      .filter(p=>p!==selected && p!=="Gerência")
+      .map(p=>{
+        const shared=(byProfile[p]||[]).filter(i=>mine.has(i.id));
+        if(!shared.length) return null;
+        const doneMe=shared.filter(i=>entryFor(i.id).status==="Feito").length;
+        const doneThem=shared.filter(i=>entries[`${p}|${date}|${i.id}`]?.value.status==="Feito").length;
+        const missing=shared.filter(i=>entryFor(i.id).status==="Feito" && entries[`${p}|${date}|${i.id}`]?.value.status!=="Feito").map(i=>i.name);
+        return {person:p,total:shared.length,doneMe,doneThem,missing};
+      })
+      .filter((x):x is {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}=>!!x);
+  },[selected,date,entries]);
+  function sharedProductionSection(){
+    if(!sharedProduction.length) return null;
+    return <section className="card p-5 mt-4" aria-label="Produção compartilhada">
+      <h3 className="font-extrabold text-[18px]">Produção compartilhada</h3>
+      <p className="text-[13px] text-[var(--muted)] mt-1">Quem faz os mesmos itens que {selected} — progresso de hoje.</p>
+      <ul className="mt-3 space-y-3">{sharedProduction.map(s=><li key={s.person} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0">
+        <p className="font-bold text-[15px]">{s.person} <span className="text-[12px] font-normal text-[var(--muted)]">· {s.total} itens em comum</span></p>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Você {s.doneMe}/{s.total} · {s.person} {s.doneThem}/{s.total}</p>
+        {s.missing.length>0 && <p className="text-[13px] font-bold text-[var(--warning-text)] mt-1">Falta a {s.person}: {s.missing.slice(0,4).join(" · ")}{s.missing.length>4?"…":""}</p>}
+      </li>)}</ul>
+    </section>;
+  }
   const pendingSection = activeSections.find(s=>{ const sub2=submissionForSection(s); const locked2=!!sub2 && (sub2.value.status==="Aguardando" || sub2.value.status==="Aprovado"); return !locked2; });
   const pendingSectionCounts = pendingSection ? countsForSection(pendingSection) : null;
   const latestHandover = useMemo(()=>{
@@ -1811,6 +1868,7 @@ export default function App(){
         <h3 className="font-extrabold text-[18px]">Próximas pendências</h3>
         {nextPending.length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Tudo em dia.</p> : <ul className="mt-3 space-y-2">{nextPending.map(({item,sec,status})=><li key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere]">{item.name}</span><span className="text-[12px] text-[var(--muted)]">{displaySectionTitle(sec)} · {status||"sem marcação"}</span><button onClick={()=>{setTab("chat"); setConversation(selected||"");}} className="bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Ver conversa</button></li>)}</ul>}
       </section>
+      {sharedProductionSection()}
       <section className="card p-5 mt-4" aria-label="Tarefas avulsas">
         <h3 className="font-extrabold text-[18px]">Tarefas avulsas</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Tarefa com responsável e prazo. Vencida, aparece em vermelho e a gerência é avisada.</p>
@@ -1920,6 +1978,7 @@ export default function App(){
         <h3 className="font-extrabold text-[18px]">Meus treinamentos</h3>
         {trainings.filter(t=>t.value.person===authUser).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhum treinamento atribuído.</p> : <ul className="mt-3 space-y-2">{trainings.filter(t=>t.value.person===authUser).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{row.value.title}</span><span className="text-[12px] font-bold">{row.value.status}</span>{row.value.status==="Pendente" && <button onClick={()=>void setTrainingStatus(row,"Concluído")} className="bg-white text-black font-bold text-[12px] px-3 py-2 rounded-xl">Marcar concluído</button>}</li>)}</ul>}
       </section>
+      <div className="[&>section]:mt-4">{sharedProductionSection()}</div>
 
       <section className="mt-5 card p-5">
         <div>
@@ -1962,16 +2021,18 @@ export default function App(){
           {isPistaSection && guideOpen[sec] && <div className="mt-3 card p-5 border border-[var(--warning)]"><p className="font-extrabold text-[16px]">Mapa da pista — guia visual</p><p className="text-[12px] text-[var(--muted)] mt-1">Confira a posição de cada item antes de concluir.</p><ul className="mt-4 space-y-3">{PISTA_GUIDE.map(g=><li key={g.label} className="leading-relaxed"><span className="block text-[13px] font-extrabold tracking-wide text-[var(--warning-text)]">{g.label}</span><span className="block text-[17px] font-bold leading-snug mt-1 [overflow-wrap:anywhere]">{g.items}</span></li>)}</ul></div>}
 
           {!collapsedSections[sec] && <div className="mt-3 space-y-4">
-            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${flashId===item.id?"item-pop":""} ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
+            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${flashId===item.id?"item-pop":""} ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
               <div className="flex gap-3 items-start">
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap gap-2 items-center"><span style={{background:fs.background,color:fs.color}} className="text-[11px] font-extrabold px-2.5 py-1 rounded-full">{fs.label}</span><span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full inline-flex items-center gap-1 ${e.status==="Feito"?"bg-[var(--success-bg)] text-[var(--success-text)]":e.status==="Não feito"?"bg-[var(--danger-bg)] text-[var(--danger-text)]":"bg-[var(--surface-2)] text-[var(--muted)]"}`}>{e.status==="Feito" && <Check size={13} strokeWidth={3}/>} {statusLabel(e.status)}</span></div>
                   <h3 className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere]"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}{instructions.find(i=>i.value.itemId===item.id)?.value?.text && <p className="mt-2 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">📋 {instructions.find(i=>i.value.itemId===item.id)!.value.text}</p>}
                   {(!isKioskSelected || item.section==="Produção do Quiosque") && <p className="text-[12px] text-[var(--muted)] mt-2 leading-relaxed"><span className="font-bold tracking-wide">A PRODUZIR</span> · <span className="[overflow-wrap:anywhere]">{item.target}</span></p>}
+                  {deps.length>0 && <p className="mt-2 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)] p-3 text-[13px] font-bold">⚠️ Faça antes: {deps.map(d=>d.name).join(" · ")}</p>}
+                  {sug && <div className="mt-2 flex flex-wrap items-center gap-2"><span className="text-[12px] font-bold text-[var(--muted)]">📈 Sugestão: {sug.value} un. ({sug.days} dias iguais)</span><button type="button" disabled={saving||locked||readOnly||!feitoEnabled} onClick={()=>void saveFeito(item,String(sug.value))} className="bg-[var(--surface-2)] border border-[var(--line)] text-[12px] font-extrabold px-3 py-2 rounded-xl disabled:opacity-50">Usar</button></div>}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-4" role="group" aria-label={`Status de ${item.name}`}>{(["Feito","Não feito"] as const).map(s=><button key={s} disabled={saving||locked||readOnly} onClick={()=>{ haptic(); setStatus(item,s); }} className={`status-btn inline-flex items-center justify-center gap-1.5 ${e.status===s?"active":""}`} style={e.status===s?{background:s==="Feito"?"var(--green)":"var(--danger)"}:{}}>{s==="Feito"?<Check size={17} strokeWidth={3}/>:<X size={17} strokeWidth={3}/>} {s}</button>)}</div>
+              <div className="grid grid-cols-2 gap-2 mt-4" role="group" aria-label={`Status de ${item.name}`}>{(["Feito","Não feito"] as const).map(s=><button key={s} disabled={saving||locked||readOnly||(s==="Feito"&&deps.length>0)} onClick={()=>{ haptic(); setStatus(item,s); }} className={`status-btn inline-flex items-center justify-center gap-1.5 ${e.status===s?"active":""}`} style={e.status===s?{background:s==="Feito"?"var(--green)":"var(--danger)"}:{}}>{s==="Feito"?<Check size={17} strokeWidth={3}/>:<X size={17} strokeWidth={3}/>} {s}</button>)}</div>
               {(!isKioskSelected || item.section==="Produção do Quiosque") && <div className="mt-4">
                 <span className="text-[13px] font-bold text-[var(--muted)]">FEITO</span><Stepper value={feitoValue} disabled={!feitoEnabled||locked||readOnly} label={`Quantidade feita de ${item.name}`} onChange={(n)=>saveFeito(item,String(n))} />{!feitoEnabled && <p className="text-[12px] text-[var(--muted)] mt-1.5">{e.status==="Não feito" ? "Travado em 0 — item marcado como Não feito." : "Marque Feito para liberar a quantidade."}</p>}
               </div>}
