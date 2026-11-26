@@ -77,6 +77,10 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Comando de voz:** botão “Falar ou anotar item” no checklist; abre um painel com reconhecimento em pt-BR e um campo de texto alternativo que funciona em qualquer navegador (ex.: “Ebi Hot 12”). Marca como Feito e salva a quantidade em um único registro.
 - **Ficha do produto:** toque no nome do item para ver foto de referência, padrão, instrução, sugestão, que foi feito ontem e colegas que fazem o mesmo item.
 - **QR por estação:** gerência gera um QR por pessoa/posto; ao escanear, o app abre com o login preenchido.
+- **Compartilhar relatório:** usa o menu de compartilhar do celular (WhatsApp incluído), com download como fallback.
+- **Passagem de turno automática:** botão “Puxar pendências” preenche o recado com pendências, faltas, temperaturas fora da faixa, tarefas atrasadas e não feitos.
+- **Confirmação de leitura:** mensagens da gerência podem ser confirmadas pelo destinatário; a gerência vê “Lido por …”.
+- O chat carrega até 1000 mensagens (antes eram só 100).
 
 ## Notificações push
 
