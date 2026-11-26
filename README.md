@@ -112,10 +112,15 @@ Tirar foto (câmera), escolher da galeria, pré-visualizar, excluir e desfazer e
 
 ## Backend / persistência
 
-O app suporta dois modos, escolhidos automaticamente:
+O app suporta três modos, em ordem de prioridade:
 
-1. **Supabase (produção):** se `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` estiverem preenchidos, `src/App.tsx` chama o PostgREST diretamente na tabela `records`.
-2. **Local (dev):** sem essas variáveis, um plugin do Vite (`vite.config.ts`) responde `POST /actions` e grava em `.data/db.json` (ignorado pelo Git).
+1. **Produção (recomendado):** `VITE_ACTIONS_URL=/api/actions`. O navegador chama a função da Vercel (`api/actions.js`), que usa `SUPABASE_SERVICE_ROLE_KEY` no servidor. A chave anon não é necessária.
+2. **Modo antigo (dev):** `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON_KEY` chamam o PostgREST direto. Só use se as políticas RLS permitirem.
+3. **Local:** sem nenhuma dessas variáveis, o plugin do Vite responde `POST /actions` e grava em `.data/db.json`.
+
+### Fechar o banco (depois do deploy)
+
+Rode `supabase/migrations/20261126000000_lockdown.sql` no SQL Editor do Supabase. Ele revoga `anon`/`authenticated` na tabela `records`, deixando só `service_role`. O cron e o push já usam `service_role`.
 
 ### Configurando o Supabase
 
