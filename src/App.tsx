@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell, Mic, Share2 } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
 import { api } from "./api";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 
@@ -454,7 +454,6 @@ export default function App(){
   const [saving,setSaving]=useState(false);
   const [tab,setTab]=useState<Tab>("checklist");
   const [conversation,setConversation]=useState<string|null>(null);
-  const [flashId,setFlashId]=useState<string|null>(null);
   const [loginInput,setLoginInput]=useState("");
   const [passwordInput,setPasswordInput]=useState("");
   const [showPassword,setShowPassword]=useState(false);
@@ -476,12 +475,9 @@ export default function App(){
   },[]);
   const [toast,setToast]=useState<{text:string;undo?:()=>void}|null>(null);
   const [photoViewer,setPhotoViewer]=useState<{src:string;label:string;onDelete?:()=>void}|null>(null);
-  const [searchOpen,setSearchOpen]=useState(false);
-  const [searchQ,setSearchQ]=useState("");
-  const [collapsedSections,setCollapsedSections]=useState<Record<string,boolean>>({});
   useEffect(()=>{ if(!toast) return; const t=setTimeout(()=>setToast(null),5200); return ()=>clearTimeout(t); },[toast]);
   useEffect(()=>{ if(msg && authUser) setToast({text:msg}); },[msg,authUser]);
-  useEffect(()=>{ const onKey=(ev:KeyboardEvent)=>{ if((ev.metaKey||ev.ctrlKey)&&ev.key.toLowerCase()==="k"){ ev.preventDefault(); setSearchOpen(v=>!v); } if(ev.key==="Escape"){ setSearchOpen(false); setPhotoViewer(null); } }; window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey); },[]);
+  useEffect(()=>{ const onKey=(ev:KeyboardEvent)=>{ if(ev.key==="Escape") setPhotoViewer(null); }; window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey); },[]);
   const [reproveFor,setReproveFor]=useState<{text:string; person:string; sectionText:string}|null>(null);
   const [obsDrafts,setObsDrafts]=useState<Record<string,string>>({});
   const [reproveNote,setReproveNote]=useState("");
@@ -1349,7 +1345,7 @@ export default function App(){
   async function saveEntry(next:Entry, opts?:{silent?:boolean; message?:string}){
     if(!selected) return; if(!opts?.silent){ setMsg(""); }
     await persistEntry(next);
-    if(!opts?.silent){ setMsg(opts?.message || "Item salvo."); setFlashId(next.itemId); setTimeout(()=>setFlashId(null),600); }
+    if(!opts?.silent){ setMsg(opts?.message || "Item salvo."); }
   }
   async function setStatus(item:Item,status:"Feito"|"Não feito"){
     if(isManager){ setMsg("Modo conferência: a Gerência só confere o checklist."); return; }
@@ -1865,17 +1861,6 @@ export default function App(){
   const weeklyMarkedCount = WEEKLY_ITEMS.filter(i=>weeklyEntryFor(i.id).status!=="").length;
   const weeklySubForWeek = Object.values(weeklySubs).filter(s=>s.value.profile===selected && s.value.weekKey===weekKeyFor(date)).sort((a,b)=>b.id.localeCompare(a.id))[0] || null;
 
-  const searchResults = useMemo(()=>{
-    const q=searchQ.trim().toLowerCase();
-    const pool = [
-      ...ALL_ITEMS.map(i=>({id:i.id,name:i.name,section:i.section as string,kind:"Checklist"})),
-      ...WEEKLY_ITEMS.map(i=>({id:i.id,name:i.name,section:"Limpeza Semanal",kind:"Semanal"})),
-      ...MAINT_ITEMS.map(i=>({id:i.id,name:i.name,section:"Manutenção",kind:"Manutenção"})),
-    ];
-    if(!q) return pool.slice(0,8);
-    return pool.filter(i=>i.name.toLowerCase().includes(q)||i.section.toLowerCase().includes(q)).slice(0,24);
-  },[searchQ]);
-
   const themeButton = <button type="button" onClick={()=>setTheme(theme==="light"?"dark":"light")} aria-label={theme==="light"?"Ativar modo escuro":"Ativar modo claro"} className="shrink-0 w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--ink)] border border-[var(--line)] pressable">{theme==="light"?<Moon size={18}/>:<Sun size={18}/>}</button>;
   const loginContent = (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 py-8">
@@ -2104,7 +2089,6 @@ export default function App(){
 
     {tab==="checklist" && !isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[220px] tab-transition">
       {draftLabel && <div className="mt-5 p-3 rounded-2xl bg-[var(--success-bg)] border border-[var(--success-border)] text-sm font-semibold flex gap-2 items-center" role="status"><Check size={17} className="shrink-0 text-[var(--green)]"/>{draftLabel}<span className="text-[var(--muted)] font-normal">· Salvo automaticamente. Fecha e volta que está tudo aqui.</span></div>}
-      {isManager && <section className="mt-5 card p-4 border border-[var(--warning)]"><div className="flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex-1"><p className="text-[13px] font-bold text-[var(--muted)] flex items-center gap-1.5"><ShieldCheck size={15}/> Gerência · modo conferência</p><p className="font-extrabold text-[18px] mt-0.5">Conferindo: {selected} · {selected ? stationMap[selected] : ""}</p><p className="text-[12px] text-[var(--muted)] mt-1 leading-relaxed">A Gerência só confere. Aprove ou peça correção no Chat — o checklist não é editável aqui.</p></div><label className="block w-full sm:w-[240px] shrink-0"><span className="text-[12px] font-bold text-[var(--muted)]">Conferir checklist de</span><select className="field mt-1.5" value={selected||""} onChange={e=>{const v=e.target.value; setSelected(v); setConversation(null); if(KIOSK_NIGHT_PROFILES.includes(v)) setTurno("Noite"); else if(KIOSK_PROFILES.includes(v)) setTurno("Manhã");}}>{staffProfiles.map(p=><option key={p} value={p}>{p} · {stationMap[p]}</option>)}</select></label></div><button type="button" onClick={goToChatForCurrent} className="mt-3 w-full rounded-xl bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold text-[13px] py-3 flex items-center justify-center gap-1.5 pressable"><MessageCircle size={15}/> Abrir conversa com {selected} no Chat</button></section>}
       <section className="mt-5 card p-5" aria-label="Minhas tarefas">
         <h3 className="font-extrabold text-[18px]">Minhas tarefas</h3>
         {tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma tarefa pendente.</p> : <ul className="mt-3 space-y-2">{tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span><button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button></li>)}</ul>}
@@ -2156,8 +2140,8 @@ export default function App(){
           </div>
           {isPistaSection && guideOpen[sec] && <div className="mt-3 card p-5 border border-[var(--warning)]"><p className="font-extrabold text-[16px]">Mapa da pista — guia visual</p><p className="text-[12px] text-[var(--muted)] mt-1">Confira a posição de cada item antes de concluir.</p><ul className="mt-4 space-y-3">{PISTA_GUIDE.map(g=><li key={g.label} className="leading-relaxed"><span className="block text-[13px] font-extrabold tracking-wide text-[var(--warning-text)]">{g.label}</span><span className="block text-[17px] font-bold leading-snug mt-1 [overflow-wrap:anywhere]">{g.items}</span></li>)}</ul></div>}
 
-          {!collapsedSections[sec] && <div className="mt-3 space-y-4">
-            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${flashId===item.id?"item-pop":""} ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
+          <div className="mt-3 space-y-4">
+            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
               <div className="flex gap-3 items-start">
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
@@ -2177,7 +2161,7 @@ export default function App(){
               </div>}
             </article>; })}
             {displayList.length===0 && <div className="card p-6 text-center">{onlyMissing ? "Nada faltando aqui." : "Nenhum item encontrado."}</div>}
-          </div>}
+          </div>
 
           {/* Concluir fixo embaixo */}
         </section>;
@@ -2236,7 +2220,7 @@ export default function App(){
     {tab==="modules" && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[160px] tab-transition">
       <div className="mt-6"><p className="text-[13px] font-bold tracking-wide uppercase text-[var(--muted)]">Módulos conectados</p><h2 className="font-extrabold text-[26px] leading-tight mt-1">Todos os módulos</h2><p className="text-[14px] text-[var(--muted)] mt-2 leading-relaxed">Cada lista abaixo lê e salva no mesmo backend de registros do app. Ao abrir, tudo é carregado de novo. Foto por item: em “Itens do checklist” use o campo Foto para tirar uma foto ou escolher uma da galeria, com opção de excluir.</p></div>
       {missingCollections.length>0 && <div role="alert" className="mt-4 p-4 rounded-2xl bg-[var(--warning-bg)] border border-[var(--warning)] text-sm leading-relaxed">{missingCollections.map(c=><p key={c} className="font-bold">tabela {c} não encontrada</p>)}<p className="text-[var(--muted)] mt-1">Os outros módulos continuam funcionando normalmente.</p></div>}
-      <div className="flex flex-wrap gap-2 mt-5" role="group" aria-label="Escolher módulo">{MODULES_META.map(m=><button key={m.key} type="button" onClick={()=>{setModuleTab(m.key); resetModuleForm(); setModuleMsg("");}} className={`chip ${moduleTab===m.key?"active":""}`}>{m.label} · {moduleRowsFor(m.key).length}</button>)}</div>
+      <div className="flex flex-wrap gap-2 mt-5" role="group" aria-label="Escolher módulo">{MODULES_META.filter(m=>["checklists","checklist_items","task_templates","dojo_credentials","dojo_item_instructions"].includes(m.key)).map(m=><button key={m.key} type="button" onClick={()=>{setModuleTab(m.key); resetModuleForm(); setModuleMsg("");}} className={`chip ${moduleTab===m.key?"active":""}`}>{m.label} · {moduleRowsFor(m.key).length}</button>)}</div>
       <section className="card p-5 mt-4" aria-label={moduleMetaFor(moduleTab).label}>
         <h3 className="font-extrabold text-[18px]">{moduleMetaFor(moduleTab).label}</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">{moduleRowsFor(moduleTab).length} registro(s) carregado(s) · coleção: {moduleMetaFor(moduleTab).collection}{moduleErrors[moduleMetaFor(moduleTab).collection] ? ` · ${moduleErrors[moduleMetaFor(moduleTab).collection]}` : ""}</p>
@@ -2369,24 +2353,6 @@ export default function App(){
         <p className="text-[11px] text-[var(--muted)] mt-1 [overflow-wrap:anywhere]">{appLink}</p>
         <button onClick={()=>setQrOpen(false)} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-3.5 text-[15px]">Fechar</button>
       </div></div>
-    </div>}
-    {authUser && !isManager && searchOpen && <div className="fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm px-4 pt-[max(4rem,calc(var(--safe-area-inset-top)+3rem))]" role="dialog" aria-modal="true" aria-label="Buscar item">
-      <div className="mx-auto w-full max-w-[560px] glass rounded-[24px] overflow-hidden sheet">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--line)]">
-          <Search size={18} className="text-[var(--muted)] shrink-0"/>
-          <input autoFocus value={searchQ} onChange={e=>setSearchQ(e.target.value)} placeholder="Buscar item, seção…" className="flex-1 bg-transparent outline-none text-[16px] min-w-0" aria-label="Buscar item"/>
-          <button onClick={()=>{setSearchOpen(false);setSearchQ("");}} aria-label="Fechar busca" className="w-9 h-9 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={17}/></button>
-        </div>
-        <ul className="max-h-[60dvh] overflow-y-auto p-2">
-          {searchResults.map(r=><li key={`${r.kind}-${r.id}`}><button onClick={()=>{setSearchOpen(false); setSearchQ(""); setTab("checklist"); setOnlyMissing(false); setCollapsedSections(p=>({...p,[r.section]:false})); setTimeout(()=>{const el=document.getElementById(`item-${r.id}`); el?.scrollIntoView({behavior:"smooth",block:"center"}); setFlashId(r.id); setTimeout(()=>setFlashId(null),900);},90);}} className="w-full text-left flex items-center gap-3 rounded-2xl px-3 py-3 hover:bg-[var(--surface-2)] pressable">
-            <span className="w-9 h-9 rounded-xl grid place-items-center bg-[var(--surface-2)] text-[var(--muted)] shrink-0">{r.kind==="Checklist"?<ClipboardCheck size={16}/>:r.kind==="Semanal"?<CalendarDays size={16}/>:<Activity size={16}/>}</span>
-            <span className="min-w-0 flex-1"><span className="block font-bold text-[15px] truncate">{r.name}</span><span className="block text-[12px] text-[var(--muted)] truncate">{r.section} · {r.kind}</span></span>
-            <ArrowRight size={16} className="text-[var(--muted)] shrink-0"/>
-          </button></li>)}
-          {searchResults.length===0 && <li className="p-6 text-center text-[14px] text-[var(--muted)]">Nenhum item encontrado para “{searchQ}”.</li>}
-        </ul>
-        <div className="px-4 py-2.5 border-t border-[var(--line)] text-[11px] text-[var(--muted)] flex items-center justify-between"><span>Toque para abrir · Esc para fechar</span><kbd className="border border-[var(--line)] rounded px-1.5 py-0.5">⌘K</kbd></div>
-      </div>
     </div>}
     {authUser && photoViewer && <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Foto — ${photoViewer.label}`}>
       <div className="w-full max-w-[620px] sheet">
