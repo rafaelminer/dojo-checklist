@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell, Mic } from "lucide-react";
 import { api } from "./api";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 
@@ -417,7 +417,12 @@ export default function App(){
   const [showPrevious,setShowPrevious]=useState(false);
   const [aiInsights,setAiInsights]=useState<string[]|null>(null);
   const [qrOpen,setQrOpen]=useState(false);
+  const [stationQrOpen,setStationQrOpen]=useState(false);
+  const [stationQrInfo,setStationQrInfo]=useState<{label:string;url:string}>({label:"",url:""});
+  const [productItem,setProductItem]=useState<Item|null>(null);
+  const [listening,setListening]=useState(false);
   const qrCanvasRef=useRef<HTMLCanvasElement|null>(null);
+  const stationQrCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const chatScrollRef=useRef<HTMLDivElement|null>(null);
   const chatEndRef=useRef<HTMLDivElement|null>(null);
   const appLink = typeof window!=="undefined" ? window.location.href.split("#")[0] : "Dojo Checklist";
@@ -454,6 +459,12 @@ export default function App(){
   const [pushBusy,setPushBusy]=useState(false);
   const [pushInfo,setPushInfo]=useState("");
   useEffect(()=>{ try{ document.documentElement.dataset.theme=theme; localStorage.setItem("dojo-theme",theme); }catch{} },[theme]);
+  useEffect(()=>{
+    try{
+      const posto = new URLSearchParams(window.location.search).get("posto");
+      if(posto) setLoginInput(posto);
+    }catch{}
+  },[]);
   const [toast,setToast]=useState<{text:string;undo?:()=>void}|null>(null);
   const [photoViewer,setPhotoViewer]=useState<{src:string;label:string;onDelete?:()=>void}|null>(null);
   const [searchOpen,setSearchOpen]=useState(false);
@@ -919,6 +930,7 @@ export default function App(){
   const pendingPlansCount = pendingPlans.length;
 
   useEffect(()=>{ if(!qrOpen) return; const t=setTimeout(()=>{ if(qrCanvasRef.current) drawQrCode(qrCanvasRef.current,appLink); },60); return ()=>clearTimeout(t); },[qrOpen,appLink]);
+  useEffect(()=>{ if(!stationQrOpen) return; const t=setTimeout(()=>{ if(stationQrCanvasRef.current) drawQrCode(stationQrCanvasRef.current,stationQrInfo.url); },60); return ()=>clearTimeout(t); },[stationQrOpen,stationQrInfo.url]);
 
   function buildAiInsights(){
     const out:string[]=[];
@@ -1726,6 +1738,42 @@ export default function App(){
       </li>)}</ul>
     </section>;
   }
+  function loginForProfile(p:string){
+    const builtin = Object.keys(LOGIN_TO_PROFILE).find(k=>LOGIN_TO_PROFILE[k]===p);
+    return builtin || credentials.find(c=>c.value.profile===p)?.value.login || normalizeLogin(p);
+  }
+  function openStationQr(p:string){
+    setStationQrInfo({label:`${p} · ${stationMap[p]||""}`,url:`${appLink}?posto=${encodeURIComponent(loginForProfile(p))}`});
+    setStationQrOpen(true);
+  }
+  async function handleVoice(text:string){
+    const q = normalizeLogin(text);
+    const match = items.find(i=>{
+      const n = normalizeLogin(i.name);
+      return q.includes(n) || n.split(" ").some(w=>w.length>=4 && q.includes(w));
+    });
+    if(!match){ setMsg(`Não encontrei o item falado: ${text}`); return; }
+    const num = text.match(/\b(\d{1,4})\b/)?.[1];
+    await setStatus(match,"Feito");
+    if(num) await saveFeito(match,num);
+    setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
+  }
+  function startVoice(){
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if(!SR){ setMsg("Seu navegador não suporta comando de voz."); return; }
+    try{
+      const rec = new SR();
+      rec.lang = "pt-BR";
+      rec.interimResults = false;
+      rec.maxAlternatives = 1;
+      rec.onresult = (ev:any)=>{ const text = String(ev.results[0][0].transcript||""); void handleVoice(text); };
+      rec.onerror = ()=>{ setListening(false); setMsg("Não entendi. Tente falar o nome do item."); };
+      rec.onend = ()=>setListening(false);
+      rec.start();
+      setListening(true);
+      setMsg("Ouvindo… fale o item e a quantidade.");
+    }catch{ setListening(false); setMsg("Não foi possível iniciar o microfone."); }
+  }
   const pendingSection = activeSections.find(s=>{ const sub2=submissionForSection(s); const locked2=!!sub2 && (sub2.value.status==="Aguardando" || sub2.value.status==="Aprovado"); return !locked2; });
   const pendingSectionCounts = pendingSection ? countsForSection(pendingSection) : null;
   const latestHandover = useMemo(()=>{
@@ -1869,6 +1917,11 @@ export default function App(){
         {nextPending.length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Tudo em dia.</p> : <ul className="mt-3 space-y-2">{nextPending.map(({item,sec,status})=><li key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere]">{item.name}</span><span className="text-[12px] text-[var(--muted)]">{displaySectionTitle(sec)} · {status||"sem marcação"}</span><button onClick={()=>{setTab("chat"); setConversation(selected||"");}} className="bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Ver conversa</button></li>)}</ul>}
       </section>
       {sharedProductionSection()}
+      <section className="card p-5 mt-4" aria-label="QR por estação">
+        <h3 className="font-extrabold text-[18px] flex items-center gap-2"><QrCode size={18} className="text-[var(--primary)]"/> QR por estação</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Gere um QR para cada estação e cole no posto: abre o app com o login da pessoa preenchido.</p>
+        <div className="flex flex-wrap gap-2 mt-3">{staffProfiles.map(p=><button key={p} type="button" onClick={()=>openStationQr(p)} className="chip"><QrCode size={13}/>{p}</button>)}</div>
+      </section>
       <section className="card p-5 mt-4" aria-label="Tarefas avulsas">
         <h3 className="font-extrabold text-[18px]">Tarefas avulsas</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Tarefa com responsável e prazo. Vencida, aparece em vermelho e a gerência é avisada.</p>
@@ -1988,6 +2041,7 @@ export default function App(){
           {selected && shifts[`${selected}|${date}`]?.value && <div className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]"><p>Iniciado às {shifts[`${selected}|${date}`]?.value.startedAt} — por {shifts[`${selected}|${date}`]?.value.startedBy}</p>{shifts[`${selected}|${date}`]?.value.finishedAt && <p>Concluído às {shifts[`${selected}|${date}`]?.value.finishedAt} — por {shifts[`${selected}|${date}`]?.value.finishedBy}</p>}</div>}
         </div>
         <button type="button" onClick={()=>setOnlyMissing(!onlyMissing)} aria-pressed={onlyMissing} className={`mt-4 w-full rounded-2xl py-3.5 text-[15px] font-extrabold pressable ${onlyMissing ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{onlyMissing ? "✓ Só o que falta" : "Só o que falta"}</button>
+        <button type="button" disabled={listening||readOnly} onClick={startVoice} className="mt-2 w-full rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] py-3.5 text-[14px] font-extrabold flex items-center justify-center gap-2 pressable disabled:opacity-60"><Mic size={17} className={listening?"text-[var(--danger)]":"text-[var(--primary)]"} />{listening ? "Ouvindo… diga o item e a quantidade" : "Falar item (mãos ocupadas)"}</button>
         <div className="flex flex-col gap-4 mt-5">
           <div className="block"><span className="text-[13px] font-bold text-[var(--muted)] flex items-center gap-1"><CalendarDays size={14}/> Data</span><div className="mt-2 flex items-center gap-2" aria-label="Navegar entre dias"><button type="button" onClick={()=>setDate(addDays(date,-1))} className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] grid place-items-center shrink-0" aria-label="Dia anterior"><ChevronLeft size={20}/></button><div className="flex-1 grid grid-cols-2 gap-1.5" role="group" aria-label="Ontem ou hoje">{([["Ontem",addDays(today(),-1)],["Hoje",today()]] as const).map(([label,val])=>(<button key={label} type="button" onClick={()=>setDate(val)} className={`min-h-[44px] rounded-full text-[13px] sm:text-[14px] font-extrabold px-1 ${date===val ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{label}</button>))}</div></div></div>
           {isManager ? <div className="grid grid-cols-2 gap-3 text-[13px]"><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Perfil</span><b>{perfil}</b></div><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Turno</span><b>{turno}</b></div></div> : <><label className="block"><span className="text-[13px] font-bold text-[var(--muted)]">Perfil</span><select className="field mt-2" value={perfil} onChange={e=>setPerfil(e.target.value)}><option>Fraco</option><option>Normal</option><option>Forte</option></select></label>
@@ -2026,7 +2080,7 @@ export default function App(){
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap gap-2 items-center"><span style={{background:fs.background,color:fs.color}} className="text-[11px] font-extrabold px-2.5 py-1 rounded-full">{fs.label}</span><span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full inline-flex items-center gap-1 ${e.status==="Feito"?"bg-[var(--success-bg)] text-[var(--success-text)]":e.status==="Não feito"?"bg-[var(--danger-bg)] text-[var(--danger-text)]":"bg-[var(--surface-2)] text-[var(--muted)]"}`}>{e.status==="Feito" && <Check size={13} strokeWidth={3}/>} {statusLabel(e.status)}</span></div>
-                  <h3 className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere]"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}{instructions.find(i=>i.value.itemId===item.id)?.value?.text && <p className="mt-2 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">📋 {instructions.find(i=>i.value.itemId===item.id)!.value.text}</p>}
+                  <h3 role="button" tabIndex={0} onClick={()=>setProductItem(item)} onKeyDown={ev=>{if(ev.key==="Enter") setProductItem(item);}} className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere] cursor-pointer hover:text-[var(--primary)]" title="Abrir ficha do produto"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span> <span className="text-[11px] font-bold text-[var(--muted)]">· ficha</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}{instructions.find(i=>i.value.itemId===item.id)?.value?.text && <p className="mt-2 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">📋 {instructions.find(i=>i.value.itemId===item.id)!.value.text}</p>}
                   {(!isKioskSelected || item.section==="Produção do Quiosque") && <p className="text-[12px] text-[var(--muted)] mt-2 leading-relaxed"><span className="font-bold tracking-wide">A PRODUZIR</span> · <span className="[overflow-wrap:anywhere]">{item.target}</span></p>}
                   {deps.length>0 && <p className="mt-2 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)] p-3 text-[13px] font-bold">⚠️ Faça antes: {deps.map(d=>d.name).join(" · ")}</p>}
                   {sug && <div className="mt-2 flex flex-wrap items-center gap-2"><span className="text-[12px] font-bold text-[var(--muted)]">📈 Sugestão: {sug.value} un. ({sug.days} dias iguais)</span><button type="button" disabled={saving||locked||readOnly||!feitoEnabled} onClick={()=>void saveFeito(item,String(sug.value))} className="bg-[var(--surface-2)] border border-[var(--line)] text-[12px] font-extrabold px-3 py-2 rounded-xl disabled:opacity-50">Usar</button></div>}
@@ -2252,6 +2306,29 @@ export default function App(){
           {photoViewer.onDelete && <button onClick={()=>photoViewer.onDelete?.()} className="flex-1 bg-[var(--danger)] text-white font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-1.5 pressable"><Trash2 size={16}/> Excluir foto</button>}
           <button onClick={()=>setPhotoViewer(null)} className="flex-1 bg-white/15 text-white font-extrabold py-3.5 rounded-2xl pressable">Fechar</button>
         </div>
+      </div>
+    </div>}
+    {authUser && productItem && <div className="fixed inset-0 z-[65] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Ficha — ${productItem.name}`}>
+      <div className="w-full sm:max-w-[520px] max-h-[88dvh] overflow-y-auto card p-5 sheet rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold tracking-wide uppercase text-[var(--muted)]">Ficha do produto</p><h2 className="font-extrabold text-[22px] leading-tight mt-1 [overflow-wrap:anywhere]">{productItem.name}</h2></div><button onClick={()=>setProductItem(null)} aria-label="Fechar ficha" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
+        {(()=>{ const ref = checklistItems.find(r=>r.value?.name===productItem.name || r.value?.itemId===productItem.id)?.value; return ref?.photo && typeof ref.photo==="string" && ref.photo.startsWith("data:image/") ? <img src={ref.photo} alt={`Referência de ${productItem.name}`} className="w-full max-h-[220px] object-contain rounded-2xl bg-[var(--surface-inset)] mt-3" /> : null; })()}
+        <div className="grid grid-cols-2 gap-2 mt-4 text-[13px]"><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase text-[var(--muted)]">A produzir</span><b className="[overflow-wrap:anywhere]">{productItem.target}</b></div><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase text-[var(--muted)]">Frequência</span><b>{productItem.freq}</b></div></div>
+        <p className="text-[13px] text-[var(--muted)] mt-3">Seção: <b>{displaySectionTitle(productItem.section)}</b></p>
+        {productItem.detail && <p className="text-[14px] mt-2 leading-relaxed">{productItem.detail}</p>}
+        {instructions.find(i=>i.value.itemId===productItem.id)?.value?.text && <p className="mt-3 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed">📋 {instructions.find(i=>i.value.itemId===productItem.id)!.value.text}</p>}
+        {(()=>{ const s=suggestedFor(productItem); return s ? <p className="mt-3 text-[13px] font-bold text-[var(--muted)]">📈 Sugestão do dia: {s.value} un. ({s.days} dias iguais)</p> : null; })()}
+        {(()=>{ const y=addDays(date,-1); const ye=entries[`${selected}|${y}|${productItem.id}`]?.value; return <p className="mt-2 text-[13px] text-[var(--muted)]">Ontem: <b>{ye?.status||"sem registro"}</b>{ye?.feito?` · ${ye.feito} un.`:""}</p>; })()}
+        <div className="mt-3"><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Colegas que fazem este item</p><div className="flex flex-wrap gap-2 mt-2">{Object.keys(byProfile).filter(p=>p!==selected && p!=="Gerência" && (byProfile[p]||[]).some(i=>i.id===productItem.id)).map(p=><span key={p} className="chip">{p} · {entries[`${p}|${date}|${productItem.id}`]?.value.status||"—"}</span>)}</div></div>
+        <div className="flex flex-wrap gap-2 mt-5"><button disabled={saving||readOnly} onClick={()=>{ void setStatus(productItem,"Feito"); setProductItem(null); }} className="flex-1 bg-[var(--green)] text-white font-extrabold py-3.5 rounded-2xl">Feito</button><button disabled={saving||readOnly} onClick={()=>{ void setStatus(productItem,"Não feito"); setProductItem(null); }} className="flex-1 bg-[var(--danger)] text-white font-extrabold py-3.5 rounded-2xl">Não feito</button><button onClick={()=>setProductItem(null)} className="w-full bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Fechar</button></div>
+      </div>
+    </div>}
+    {stationQrOpen && <div className="fixed inset-0 z-[65] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`QR — ${stationQrInfo.label}`}>
+      <div className="w-full sm:max-w-[420px] card p-5 sheet rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">QR por estação</p><h2 className="font-extrabold text-[20px] mt-1">{stationQrInfo.label}</h2></div><button onClick={()=>setStationQrOpen(false)} aria-label="Fechar QR" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
+        <p className="text-[13px] text-[var(--muted)] mt-2 leading-relaxed">Imprima ou cole na estação. Ao escanear, o app abre com o login dessa pessoa já preenchido.</p>
+        <div className="bg-white rounded-2xl p-3 mt-4 mx-auto w-fit"><canvas ref={stationQrCanvasRef} className="w-[240px] h-[240px] max-w-full block" aria-label="QR code da estação" /></div>
+        <p className="text-[11px] text-[var(--muted)] mt-2 [overflow-wrap:anywhere]">{stationQrInfo.url}</p>
+        <button onClick={()=>setStationQrOpen(false)} className="w-full mt-4 bg-[var(--primary)] text-white font-extrabold py-3.5 rounded-2xl">Fechar</button>
       </div>
     </div>}
     {authUser && toast && <div className="fixed inset-x-0 z-[70] px-3 pointer-events-none" style={{bottom:"calc(172px + var(--safe-area-inset-bottom))"}}><div className="toast pointer-events-auto max-w-[440px] mx-auto" role="status"><Check size={17} className="shrink-0"/><span className="min-w-0 flex-1">{toast.text}</span>{toast.undo && <button onClick={()=>{toast.undo?.();setToast(null);}} className="shrink-0 font-extrabold underline">Desfazer</button>}<button onClick={()=>setToast(null)} aria-label="Fechar aviso" className="shrink-0 opacity-60"><X size={15}/></button></div></div>}
