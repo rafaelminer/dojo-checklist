@@ -70,8 +70,9 @@ const hot:Item[]=[
  prod("hot-rot-1","Rotina Hot · Mise en place completa","Estação pronta","DIÁRIO","Fritura, montagem e reposição revisadas."), prod("hot-rot-2","Rotina Hot · Temperatura e ponto","Conferido","DIÁRIO","Registrar qualquer variação."), prod("hot-rot-3","Rotina Hot · Reposição contínua","Sem falta","DIÁRIO"),
 ];
 const blocoA:Item[]=[
- prod("a-1","Califórnia","2–4 un.","DIÁRIO"), prod("a-2","Jatopéia","20–40 un.","DIÁRIO"), prod("a-3","Maki Fish","12–20 un.","DIÁRIO"), prod("a-4","Philadelphia","30–60 un.","DIÁRIO"), prod("a-5","Salmão Maki","2–4 un.","DIÁRIO"), prod("a-6","Salmão Skin","15–25 un.","DIÁRIO"), prod("a-7","Uramaki Philadelphia","4–8 un.","DIÁRIO"), prod("a-8","Salmão Poró","10–15 un.","DIÁRIO"), prod("a-9","Makimagu","10–15 un.","DIÁRIO"), prod("a-10","Dual Fish","Conforme demanda","DIÁRIO"),
- prod("a-11","Pescado · Limpeza e cortes","Padrão do dia","DIÁRIO","Cortes uniformes e sem espinhas."), prod("a-12","Pescado · Porcionamento","Etiquetado","DIÁRIO"), prod("a-13","Arroz · Cocção e tempero","Ponto ideal","DIÁRIO","Arroz solto, brilhante e temperado."), prod("a-14","Arroz · Reserva e reposição","Sem falta","DIÁRIO"),
+  prod("a-1","Califórnia","2 / 4","DIÁRIO"), prod("a-2","Jatopéia","20 / 40","DIÁRIO"), prod("a-3","Maki Fish","12 / 20","DIÁRIO"), prod("a-4","Philadelphia","30 / 60","DIÁRIO"), prod("a-5","Salmão Maki","2 / 4","DIÁRIO"), prod("a-6","Salmão Skin","15 / 25","DIÁRIO"), prod("a-7","Uramaki Philadelphia","4 / 8","DIÁRIO"),
+  prod("a-8","Pescado / Cortes · Salmão limpo","5 inteiros / dia","DIÁRIO"), prod("a-9","Pescado / Cortes · Camarão descascado","2 kg / dia","DIÁRIO"), prod("a-10","Pescado / Cortes · Haddock","2 GN quando chegar","DIÁRIO"), prod("a-11","Pescado / Cortes · Sashimi Ice","1 GN / dia","DIÁRIO"), prod("a-12","Pescado / Cortes · Atum limpo","1 peça / dia","DIÁRIO"), prod("a-13","Pescado / Cortes · Tilápia","1 GN conforme necessidade","DIÁRIO"), prod("a-14","Pescado / Cortes · Aparas p/ cozinha quente","1 GN / dia","DIÁRIO"),
+  prod("a-15","Preparo · Limpeza / preparo de pescado","2 / 4 peixes","DIÁRIO"), prod("a-16","Preparo · Nigiri finalizado","30 un","DIÁRIO"), prod("a-17","Preparo · Nigiri de camarão — preparo","6 kg","DIÁRIO"),
 ];
 const blocoB:Item[]=[
  prod("b-1","Ebi Furay","30–50 un.","DIÁRIO"), prod("b-2","Light Roll","2–4 un.","DIÁRIO"), prod("b-3","Ebi Cheese","10–15 un.","DIÁRIO"), prod("b-4","Spicy Roll","30–50 un.","DIÁRIO"), prod("b-5","Spice Roll","15–25 un.","DIÁRIO"), prod("b-6","Kani Cheese","8–15 un.","DIÁRIO"), prod("b-7","Ebi Crush","Conforme demanda","DIÁRIO"),
@@ -657,20 +658,27 @@ export default function App(){
   useEffect(()=>{
     if(!authUser) return;
     let cancelled = false;
+    const version = "2026-11-26-blocoA-v2";
     (async()=>{
       try{
+        const meta = await api("records.list",{collection:"dojo_item_catalog_meta",limit:10});
+        if(cancelled) return;
+        if((meta.records||[]).some((r:any)=>r.value?.version===version)) return;
         const list = await api("records.list",{collection:"dojo_item_catalog",limit:500});
         if(cancelled) return;
-        const have = new Set((list.records||[]).map((r:any)=>r.value?.id));
+        const byId = new Map<string,any>((list.records||[]).map((r:any)=>[String(r.value?.id),r]));
         const catalog = [
-          ...ALL_ITEMS.map(i=>({id:i.id,name:i.name,section:String(i.section||"")})),
-          ...WEEKLY_ITEMS.map(i=>({id:i.id,name:i.name,section:"Limpeza Semanal"})),
-          ...MAINT_ITEMS.map(i=>({id:i.id,name:i.name,section:"Manutenção"})),
+          ...ALL_ITEMS.map(i=>({id:i.id,name:i.name,section:String(i.section||""),target:String(i.target||"")})),
+          ...WEEKLY_ITEMS.map(i=>({id:i.id,name:i.name,section:"Limpeza Semanal",target:""})),
+          ...MAINT_ITEMS.map(i=>({id:i.id,name:i.name,section:"Manutenção",target:""})),
         ];
         for(const item of catalog){
           if(cancelled) return;
-          if(!have.has(item.id)) await api("records.create",{collection:"dojo_item_catalog",value:item});
+          const existing:any = byId.get(item.id);
+          if(existing) await api("records.replace",{collection:"dojo_item_catalog",id:existing.id,value:item});
+          else await api("records.create",{collection:"dojo_item_catalog",value:item});
         }
+        await api("records.create",{collection:"dojo_item_catalog_meta",value:{version}});
       }catch{}
     })();
     return ()=>{ cancelled = true; };
