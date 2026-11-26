@@ -479,6 +479,7 @@ export default function App(){
   const QUICK_REASONS = ["Já foi produzido","Faltou insumo","Equipamento quebrou","Sem tempo / pico","Produto vencido","Outro"];
   const [msg,setMsg]=useState("");
   const [offlineMode,setOfflineMode]=useState(false);
+  const [connectionError,setConnectionError]=useState("");
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [tab,setTab]=useState<Tab>("checklist");
@@ -542,6 +543,7 @@ export default function App(){
         return (res.records||[]) as RecordRow[];
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        setConnectionError(message);
         const looksMissing = /not found|não encontrada|nao encontrada|does not exist|relation|no such table|tabela/i.test(message);
         if (looksMissing) {
           setMissingCollections(prev=>prev.includes(collection)?prev:[...prev,collection]);
@@ -585,6 +587,7 @@ export default function App(){
     if (ci) setChecklistItems(ci.filter((r)=>r.value?.name).map((r)=>({id:r.id,value:r.value as ChecklistItemRecord})));
     if (tt) setTaskTemplates(tt.filter((r)=>r.value?.name).map((r)=>({id:r.id,value:r.value as TaskTemplate})));
     if (cr) setCredentials(cr.filter((r)=>r.value?.login && r.value?.profile).map((r)=>({id:r.id,value:r.value as CredentialRecord})));
+    setConnectionError("");
   }
   const MODULES_META: {key:string; collection:string; label:string; fields:{key:string; label:string; placeholder?:string; hint?:string}[]}[] = [
     {key:"checklists",collection:"checklists",label:"Checklists",fields:[{key:"title",label:"Título",placeholder:"Ex.: Abertura — Quiosque"},{key:"profile",label:"Responsável",placeholder:"Ex.: Laís"},{key:"date",label:"Data",placeholder:"AAAA-MM-DD"},{key:"turno",label:"Turno",placeholder:"Manhã / Tarde / Noite"}]},
@@ -1615,7 +1618,7 @@ export default function App(){
         <span className="w-16 h-16 grid place-items-center rounded-[20px] bg-[var(--primary)] text-white"><ClipboardCheck size={32}/></span>
         <div className="font-extrabold tracking-tight text-[26px] leading-none mt-4">Dojo Checklist</div>
         <div className="text-[13px] text-[var(--muted)] mt-2">Operação · Padrão · Conferência</div>
-        <p role="status" className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold text-[var(--muted)]"><span aria-hidden="true" className="w-2 h-2 rounded-full" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} />{loading ? "Conectando…" : offlineMode ? "Conexão: erro — seus dados ficam salvos nesta tela até a conexão voltar" : "Conectado"}</p>
+        <p role="status" title={connectionError || undefined} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold text-[var(--muted)]"><span aria-hidden="true" className="w-2 h-2 rounded-full" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} />{loading ? "Conectando…" : offlineMode ? `Conexão: erro — ${connectionError || "backend indisponível"}` : "Conectado"}</p>
       </div>
       <div className="w-full max-w-[440px] card p-6 sm:p-7 mt-7">
         <h1 className="font-extrabold text-[24px] leading-tight tracking-tight text-center">Bem-vindo</h1>
@@ -1646,7 +1649,7 @@ export default function App(){
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
         <span className="w-10 h-10 rounded-full grid place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
         <div className="min-w-0 flex-1 leading-tight"><div className="font-extrabold tracking-tight text-[17px] sm:text-[19px] truncate">Olá, {authUser} — {stationMap[authUser||""]}</div><div className="text-[12px] sm:text-[13px] text-[var(--muted)] mt-0.5 truncate">{fmtDate(date)} · {perfil} · {turno}{isManager && selected && selected!==authUser ? ` · Conferindo: ${selected}` : ""}</div></div>
-        <span role="status" aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
+        <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
         {themeButton}
         <button onClick={handleLogout} className="shrink-0 bg-white text-black font-bold text-[12px] sm:text-[13px] px-3 py-2 rounded-full whitespace-nowrap flex items-center gap-1 pressable"><LogOut size={14}/> <span className="hidden sm:inline">Sair</span></button>
       </div>
