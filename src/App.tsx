@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell, Mic } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell, Mic, Share2 } from "lucide-react";
 import { api } from "./api";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 
@@ -380,6 +380,7 @@ export default function App(){
   const [logbook,setLogbook]=useState<{id:string,value:LogbookRecord}[]>([]);
   const [trainings,setTrainings]=useState<{id:string,value:TrainingRecord}[]>([]);
   const [instructions,setInstructions]=useState<{id:string,value:InstructionRecord}[]>([]);
+  const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
   const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
   const [staffEditingId,setStaffEditingId]=useState<string|null>(null);
@@ -538,7 +539,7 @@ export default function App(){
   async function reloadRecords(){
     const loadOne = async (collection:string) => {
       try {
-        const res = await api("records.list",{collection,limit:100});
+        const res = await api("records.list",{collection,limit:1000});
         setMissingCollections(prev=>prev.filter(c=>c!==collection));
         setModuleErrors(prev=>{ const n={...prev}; delete n[collection]; return n; });
         return (res.records||[]) as RecordRow[];
@@ -717,16 +718,18 @@ export default function App(){
 
   async function reloadAux(){
     try{
-      const [t,l,tr,ii] = await Promise.all([
+      const [t,l,tr,ii,rd] = await Promise.all([
         api("records.list",{collection:"dojo_tasks",limit:200}),
         api("records.list",{collection:"dojo_logbook",limit:200}),
         api("records.list",{collection:"dojo_trainings",limit:200}),
         api("records.list",{collection:"dojo_item_instructions",limit:500}),
+        api("records.list",{collection:"dojo_chat_reads",limit:500}),
       ]);
       setTasks((t.records||[]) as any);
       setLogbook((l.records||[]) as any);
       setTrainings((tr.records||[]) as any);
       setInstructions((ii.records||[]) as any);
+      setReads((rd.records||[]) as any);
     }catch{}
   }
   useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
@@ -962,7 +965,7 @@ export default function App(){
     setAiInsights(out.length?out.slice(0,6):["Sem alerta hoje — operação dentro do padrão"]);
   }
 
-  function exportReport(){
+  function reportText(){
     const lines:string[]=[];
     lines.push(`DOJO CHECKLIST — RELATÓRIO DO DIA`, `Data: ${fmtDate(date)}`, ``);
     lines.push(`RESUMO`, `Hoje: ${completedSectionsToday} / ${expectedSectionsToday} concluídos`, `% Conformidade Hoje: ${complianceToday}%`, `Planos de Ação Pendentes: ${pendingPlansCount}`, `Atrasados: ${delayedList.list.length}`, ``);
@@ -980,9 +983,24 @@ export default function App(){
     const tempsToday=Object.values(temps).filter(x=>x.value.date===date&&(x.value.fria.trim()||x.value.freezer.trim()));
     if(!tempsToday.length) lines.push("Nenhuma temperatura registrada no dia.");
     tempsToday.forEach(x=>{ const f=parseTempValue(x.value.fria), fr=parseTempValue(x.value.freezer); const alert=(f!==null&&(f<0||f>5))||(fr!==null&&fr>=-12); lines.push(`${x.value.profile} — Câmara Fria: ${x.value.fria||"—"} °C — Freezer: ${x.value.freezer||"—"} °C${alert?" — FORA DA FAIXA":""}`); });
-    const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"});
+    return lines.join("\n");
+  }
+  function downloadReport(text:string){
+    const blob=new Blob([text],{type:"text/plain;charset=utf-8"});
     const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`dojo-relatorio-${date}.txt`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
-    setMsg("Relatório do dia gerado para baixar.");
+  }
+  function exportReport(){ downloadReport(reportText()); setMsg("Relatório do dia gerado para baixar."); }
+  async function shareReport(){
+    const text=reportText();
+    const file=new File([text],`dojo-relatorio-${date}.txt`,{type:"text/plain;charset=utf-8"});
+    try{
+      if(navigator.share){
+        await navigator.share({files:[file],title:`Dojo — ${fmtDate(date)}`,text:`Relatório do dia ${fmtDate(date)}`});
+        setMsg("Relatório compartilhado.");
+        return;
+      }
+    }catch{ setMsg("Compartilhamento cancelado."); return; }
+    downloadReport(text); setMsg("Relatório baixado — compartilhe pelo seu app de mensagens.");
   }
 
   function pendingDeps(itemId:string):Item[]{
@@ -1624,6 +1642,23 @@ export default function App(){
     if(t.status==="Concluída") return false;
     return `${t.dueDate}T${t.dueTime||"23:59"}` < nowLocalString();
   }
+  function fillHandover(){
+    const parts:string[]=[];
+    const pend = activeSections.flatMap(sec=>countsForSection(sec).list.filter(i=>entryFor(i.id).status!=="Feito").map(i=>`${i.name} (${sec})`));
+    if(pend.length) parts.push(`Pendências: ${pend.slice(0,10).join(", ")}${pend.length>10?"…":""}`);
+    const faltas = openShortages.map(s=>`${s.value.itemName}${s.value.profile&&s.value.profile!==selected?` (${s.value.profile})`:""}`);
+    if(faltas.length) parts.push(`Faltas em aberto: ${faltas.join(", ")}`);
+    const t = temps[`${selected}|${date}`]?.value;
+    if(t){
+      const f=parseTempValue(t.fria), fr=parseTempValue(t.freezer);
+      if((f!==null&&(f<0||f>5))||(fr!==null&&fr>=-12)) parts.push(`Temperatura fora da faixa: câmara ${t.fria||"—"} °C / freezer ${t.freezer||"—"} °C`);
+    }
+    const atrasadas = tasks.filter(x=>x.value.owner===selected && taskOverdue(x.value)).map(x=>x.value.title);
+    if(atrasadas.length) parts.push(`Tarefas atrasadas: ${atrasadas.join(", ")}`);
+    const naoFeitos = activeSections.flatMap(sec=>countsForSection(sec).list.filter(i=>entryFor(i.id).status==="Não feito").map(i=>`${i.name}: ${entryFor(i.id).justificativa||"sem justificativa"}`));
+    if(naoFeitos.length) parts.push(`Não feitos: ${naoFeitos.slice(0,8).join(" · ")}`);
+    setHandoverText(parts.length?parts.join("\n"):"Sem pendências para passar. Tudo concluído até aqui.");
+  }
   async function createTask(){
     if(!isManager){ setMsg("Somente a Gerência cria tarefas."); return; }
     const title = String(auxForm.taskTitle||"").trim();
@@ -1768,6 +1803,14 @@ export default function App(){
     setQuickEntryOpen(false); setQuickEntryText("");
     setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
   }
+  async function confirmRead(messageId:string){
+    if(!authUser) return;
+    if(reads.some(r=>r.value.messageId===messageId && r.value.profile===authUser)) return;
+    try{
+      await api("records.create",{collection:"dojo_chat_reads",value:{messageId,profile:authUser,at:nowTime()}});
+      await reloadAux();
+    }catch{}
+  }
   function startVoice(){
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if(!SR){ setMsg("Seu navegador não suporta comando de voz."); return; }
@@ -1876,6 +1919,7 @@ export default function App(){
         <button onClick={buildAiInsights} className="flex-1 min-w-[150px] bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Sparkles size={17}/> Revisão da IA</button>
         <button onClick={()=>setQrOpen(true)} className="flex-1 min-w-[150px] bg-[var(--secondary-bg)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={17}/> QR do Dojo</button>
         <button onClick={exportReport} className="flex-1 min-w-[170px] bg-white text-black font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Download size={17}/> Exportar relatório do dia</button>
+        <button onClick={()=>void shareReport()} className="flex-1 min-w-[170px] bg-[var(--surface-2)] border border-[var(--line)] text-[var(--ink)] font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Share2 size={17}/> Compartilhar relatório</button>
         <button onClick={()=>setWeeklySummaryOpen(!weeklySummaryOpen)} aria-expanded={weeklySummaryOpen} className="flex-1 min-w-[170px] bg-[var(--secondary-bg)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><CalendarDays size={17}/> Resumo da Semana</button>
         {isManager && <button onClick={()=>setRankingOpen(!rankingOpen)} aria-expanded={rankingOpen} className="flex-1 min-w-[170px] bg-[#FFC107] text-black font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2">🏆 {rankingOpen ? "Ocultar Ranking da Semana" : "Ver Ranking da Semana"}</button>}
       </div>
@@ -2220,7 +2264,14 @@ export default function App(){
               {isMine && <div className="text-[13px] font-extrabold" style={{color:"#075E54"}}>Você</div>}
               <p className="text-[14.5px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] mt-0.5 text-[#111B21]">{m.value.text}</p>
               {isChecklist && parsed && isManager && activeConvo.kind!=="group" && <div className="flex gap-2 mt-3"><button disabled={saving} onClick={()=>approveChecklist(m.value.text)} className="flex-1 bg-[#075E54] text-white text-[13px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"><ThumbsUp size={15}/> Aprovar</button><button disabled={saving} onClick={()=>{setReproveFor({text:m.value.text,person:parsed.person,sectionText:parsed.sectionText}); setReproveNote("");}} className="flex-1 bg-white text-[var(--danger-strong)] border border-[var(--danger-border)] text-[13px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"><ThumbsDown size={15}/> Pedir correção</button></div>}
-              <div className="flex justify-end items-center gap-1 mt-1"><span className="text-[11px] text-[#667781]">{m.value.time}</span>{isMine && <span className="text-[12px] font-bold text-[#53BDEB]" aria-label="Entregue / lida">✓✓</span>}</div>
+              <div className="flex justify-end items-center gap-1 mt-1 flex-wrap">
+                <span className="text-[11px] text-[#667781]">{m.value.time}</span>
+                {isMine && (reads.filter(r=>r.value.messageId===m.id).length>0
+                  ? <span className="text-[11px] font-bold text-[#075E54]">Lido por {Array.from(new Set(reads.filter(r=>r.value.messageId===m.id).map(r=>r.value.profile))).join(", ")}</span>
+                  : <span className="text-[12px] font-bold text-[#53BDEB]" aria-label="Entregue">✓✓</span>)}
+                {m.value.sender==="Gerência" && !isMine && !reads.some(r=>r.value.messageId===m.id && r.value.profile===authUser) && <button onClick={()=>void confirmRead(m.id)} className="text-[11px] font-bold text-[#075E54] underline">Confirmar leitura</button>}
+                {m.value.sender==="Gerência" && !isMine && reads.some(r=>r.value.messageId===m.id && r.value.profile===authUser) && <span className="text-[11px] font-bold text-[#075E54]">✓ Lido</span>}
+              </div>
             </div>
           </div>;
         })}
@@ -2276,6 +2327,7 @@ export default function App(){
         <h2 className="font-extrabold text-[22px] leading-tight">Passagem de turno</h2>
         <p className="text-[14px] text-[var(--muted)] mt-2 leading-relaxed">{displaySectionTitle(pendingHandoverSection)} está pronta para concluir.</p>
         <label className="block mt-4"><span className="text-[14px] font-bold">Deixar recado para o próximo turno? <span className="font-semibold text-[var(--muted)]">(opcional)</span></span><textarea value={handoverText} onChange={e=>setHandoverText(e.target.value)} placeholder="Ex.: Faltou camarão empanado, deixar 20 a mais amanhã" className="field mt-2" rows={3} aria-label="Deixar recado para o próximo turno?" /></label>
+        <button type="button" onClick={fillHandover} className="w-full mt-2 bg-[var(--surface-2)] border border-[var(--line)] text-[var(--ink)] font-extrabold text-[13px] py-3 rounded-2xl">Puxar pendências automaticamente</button>
         <button disabled={handoverSaving} onClick={()=>confirmHandover(true)} className="w-full mt-4 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[15px] disabled:opacity-50">{handoverSaving ? "Concluindo…" : "Concluir e deixar recado"}</button>
         <button disabled={handoverSaving} onClick={()=>confirmHandover(false)} className="w-full mt-2 bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-bold rounded-2xl py-3.5 text-[14px] disabled:opacity-50">Concluir sem recado</button>
         <button disabled={handoverSaving} onClick={()=>{setHandoverDialogOpen(false); setPendingHandoverSection(null); setHandoverText("");}} className="w-full mt-2 text-[13px] font-bold text-[var(--muted)] py-2">Voltar</button>
