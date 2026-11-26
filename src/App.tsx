@@ -8,7 +8,7 @@ type Status = "Feito" | "Não feito" | "";
 type Section = "Produção" | "Produção do Quiosque" | "Limpeza" | "Organização" | "Montagem da Pista - Fria" | "Montagem da Pista - Quente" | "Reposição da Pista - Fria" | "Reposição da Pista - Quente";
 type Item = { id: string; name: string; target: string; freq: Freq; section: Section; detail?: string };
 type Entry = { profile: string; date: string; itemId: string; status: Status; feito: string; justificativa: string; updatedBy?: string; updatedAt?: string; perfil?: string; turno?: string; photo?: string };
-type ChatMsg = { profile: string; sender: string; text: string; time: string };
+type ChatMsg = { profile: string; sender: string; text: string; time: string; audio?: string; duration?: number };
 type SubmissionItem = { itemId: string; status: Status; feito: string; justificativa: string };
 type Submission = { profile: string; date: string; section: Section; period: "DIÁRIO" | "SEMANAL" | "MENSAL"; perfil: string; turno: string; items: SubmissionItem[]; status: "Aguardando" | "Aprovado" | "Para corrigir"; fingerprint: string; correctionNote?: string };
 type ActionPlan = { profile: string; date: string; itemId: string; itemName: string; section: string; justificativa: string; deadline: string; status: "Pendente" | "Resolvido" | "Devolvido"; kind: "nao-feito" | "temperatura" | "validade" | "manutencao"; resolvedAt?: string; createdAt?: string };
@@ -438,6 +438,10 @@ export default function App(){
   const lastTempKey = useRef("");
   const tempTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [draft,setDraft]=useState("");
+  const [recording,setRecording]=useState(false);
+  const mediaRecorderRef=useRef<MediaRecorder|null>(null);
+  const audioChunksRef=useRef<Blob[]>([]);
+  const recordStartRef=useRef(0);
   const [occurrenceOpen,setOccurrenceOpen]=useState(false);
   const [occurrenceText,setOccurrenceText]=useState("");
   const [occurrenceSending,setOccurrenceSending]=useState(false);
@@ -1451,8 +1455,50 @@ export default function App(){
     tempTimer.current = setTimeout(()=>{ persistTemp(nextFria,nextFreezer); },800);
   }
 
-  async function sendChat(text:string,sender:string,profile:string){
-    const value:ChatMsg={profile,sender,text,time:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
+  async function startVoiceNote(){
+    try{
+      if(!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder==="undefined"){
+        setMsg("Gravação de voz não suportada neste navegador.");
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      const rec = new MediaRecorder(stream);
+      audioChunksRef.current = [];
+      rec.ondataavailable = (ev:BlobEvent)=>{ if(ev.data.size) audioChunksRef.current.push(ev.data); };
+      rec.onstop = async ()=>{
+        stream.getTracks().forEach(t=>t.stop());
+        const blob = new Blob(audioChunksRef.current,{type:rec.mimeType||"audio/webm"});
+        if(blob.size){
+          const dataUrl = await new Promise<string>(resolve=>{
+            const reader = new FileReader();
+            reader.onload = ()=>resolve(String(reader.result||""));
+            reader.readAsDataURL(blob);
+          });
+          if(dataUrl && conversation){
+            const secs = Math.max(1,Math.round((Date.now()-recordStartRef.current)/1000));
+            await sendChat(`🎤 Áudio (${secs}s)`,authUser||"",conversation,{audio:dataUrl,duration:secs});
+          }
+        }
+      };
+      rec.start();
+      mediaRecorderRef.current = rec;
+      recordStartRef.current = Date.now();
+      setRecording(true);
+    }catch{
+      setMsg("Não foi possível acessar o microfone. Permita o uso no navegador.");
+      setRecording(false);
+    }
+  }
+  function stopVoiceNote(){
+    const rec = mediaRecorderRef.current;
+    if(rec && rec.state!=="inactive"){
+      rec.stop();
+      mediaRecorderRef.current = null;
+      setRecording(false);
+    }
+  }
+  async function sendChat(text:string,sender:string,profile:string,extra?:{audio?:string;duration?:number}){
+    const value:ChatMsg={profile,sender,text,time:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),...(extra||{})};
     const localId = `local-chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setChat(prev=>[...prev,{id:localId,value}]);
     try{ await api("records.create",{collection:"dojo_chat",value,idempotency_key:`dojo-chat-${Date.now()}-${Math.random().toString(36).slice(2)}`}); void notifyMessage({profile,sender,text}); await reloadRecords(); setOfflineMode(false); }catch{ setOfflineMode(true); }
@@ -2283,7 +2329,7 @@ export default function App(){
             <div className={`max-w-[86%] sm:max-w-[72%] px-3 py-2.5 shadow-sm ${bubbleShape}`} style={{backgroundColor:bubbleBg}}>
               {!isMine && <div className="text-[13px] font-extrabold" style={{color:"#075E54"}}>{m.value.sender}</div>}
               {isMine && <div className="text-[13px] font-extrabold" style={{color:"#075E54"}}>Você</div>}
-              <p className="text-[14.5px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] mt-0.5 text-[#111B21]">{m.value.text}</p>
+              {m.value.audio ? <div className="mt-1"><audio controls src={m.value.audio} preload="metadata" className="w-full max-w-[260px] h-[42px]" aria-label={`Áudio de ${m.value.sender}`} /><p className="text-[12px] text-[#667781] mt-1">{m.value.text}</p></div> : <p className="text-[14.5px] leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere] mt-0.5 text-[#111B21]">{m.value.text}</p>}
               {isChecklist && parsed && isManager && activeConvo.kind!=="group" && <div className="flex gap-2 mt-3"><button disabled={saving} onClick={()=>approveChecklist(m.value.text)} className="flex-1 bg-[#075E54] text-white text-[13px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"><ThumbsUp size={15}/> Aprovar</button><button disabled={saving} onClick={()=>{setReproveFor({text:m.value.text,person:parsed.person,sectionText:parsed.sectionText}); setReproveNote("");}} className="flex-1 bg-white text-[var(--danger-strong)] border border-[var(--danger-border)] text-[13px] font-bold py-2.5 rounded-xl flex items-center justify-center gap-1 disabled:opacity-50"><ThumbsDown size={15}/> Pedir correção</button></div>}
               <div className="flex justify-end items-center gap-1 mt-1 flex-wrap">
                 <span className="text-[11px] text-[#667781]">{m.value.time}</span>
@@ -2299,11 +2345,13 @@ export default function App(){
       </div>
       <div ref={chatEndRef} aria-hidden="true" />
       {reproveFor && <div className="bg-[#F0F2F5] px-4 py-3 shrink-0 border-t border-black/10"><p className="font-bold text-[#111B21] text-[14px]">Pedir correção — {reproveFor.person} · {reproveFor.sectionText}</p><label className="block mt-2"><span className="text-[13px] font-bold text-[#111B21]">O que está errado?</span><textarea value={reproveNote} onChange={e=>setReproveNote(e.target.value)} placeholder="O que precisa ser refeito? Ex.: ponto, padrão, etiqueta…" className="mt-2 w-full bg-white text-[#111B21] rounded-2xl p-3 outline-none min-h-[90px] text-[15px] border border-black/10" /></label><div className="flex gap-2 mt-2"><button onClick={()=>setReproveFor(null)} className="flex-1 bg-white text-[#111B21] font-bold py-3 rounded-xl border border-black/10">Cancelar</button><button disabled={saving} onClick={sendReprove} className="flex-1 bg-[var(--danger)] text-white font-bold py-3 rounded-xl disabled:opacity-50">Enviar ocorrência</button></div></div>}
+      {recording && <div className="bg-[#075E54] text-white text-center py-2 text-[13px] font-bold shrink-0">● Gravando… solte para enviar</div>}
       <form className="bg-[#F0F2F5] p-2.5 sm:p-3 flex gap-2 items-end shrink-0" onSubmit={async ev=>{ev.preventDefault(); if(!draft.trim()) return; const t=draft; setDraft(""); await sendChat(t,authUser||"",conversation);}}>
         <div className="flex-1 bg-white rounded-full flex items-center gap-1 px-4 py-1.5 shadow-sm">
           <input value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Mensagem" className="flex-1 bg-transparent outline-none text-[#111B21] placeholder:text-[#8696A0] text-[15px] min-w-0 py-2" aria-label="Mensagem"/>
         </div>
-        <button className="w-11 h-11 min-w-[44px] min-h-[44px] shrink-0 rounded-full bg-[#00A884] text-white grid place-items-center text-[20px] font-bold shadow-sm" aria-label="Enviar mensagem">➤</button>
+        {draft.trim() ? <button className="w-11 h-11 min-w-[44px] min-h-[44px] shrink-0 rounded-full bg-[#00A884] text-white grid place-items-center text-[20px] font-bold shadow-sm" aria-label="Enviar mensagem">➤</button>
+          : <button type="button" onPointerDown={ev=>{ev.preventDefault(); void startVoiceNote();}} onPointerUp={stopVoiceNote} onPointerLeave={stopVoiceNote} onPointerCancel={stopVoiceNote} onContextMenu={ev=>ev.preventDefault()} className={`w-11 h-11 min-w-[44px] min-h-[44px] shrink-0 rounded-full grid place-items-center shadow-sm touch-none select-none ${recording?"bg-[var(--danger)] text-white scale-110":"bg-[#00A884] text-white"}`} aria-label="Segure para falar"><Mic size={20}/></button>}
       </form>
       {msg && <div className="bg-[#F0F2F5] px-4 pb-3 text-[13px] text-[#075E54] font-semibold">{msg}</div>}
     </main>}
