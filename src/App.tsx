@@ -21,6 +21,10 @@ type CredentialRecord = { login: string; profile: string; password: string; stat
 type TempEntry = { profile: string; date: string; fria: string; freezer: string };
 type ShiftEntry = { profile: string; date: string; startedAt: string; startedBy: string; finishedAt?: string; finishedBy?: string };
 type RecordRow = { id: string; value: any };
+type TaskRecord = { title: string; owner: string; dueDate: string; dueTime: string; status: "Aberta" | "Concluída"; notes?: string; createdAt: string; createdBy: string };
+type LogbookRecord = { date: string; shift: string; text: string; author: string; time: string };
+type TrainingRecord = { title: string; person: string; status: "Pendente" | "Concluído" | "Aprovado"; score?: string; approvedBy?: string; createdAt: string };
+type InstructionRecord = { itemId: string; text: string };
 type Tab = "overview" | "checklist" | "chat" | "modules";
 type ChecklistRecord = { profile: string; date: string; title: string; turno?: string; perfil?: string };
 type ChecklistItemRecord = { checklistId?: string; itemId?: string; name: string; target?: string; section?: string; freq?: string; photo_url?: string; photo?: string };
@@ -39,6 +43,7 @@ const GROUP_CHANNELS: { key:string; name:string; desc:string; members:string[] }
   { key:"grupo:quiosque", name:"Quiosque", desc:"Quiosque · manhã e noite", members:["Laís","Cleide","Talia","Tayara"] },
 ];
 const today = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
+const nowLocalString = () => { const d=new Date(); const p=(n:number)=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 const fmtDate = (d:string) => { const [y,m,dd]=d.split("-"); return `${dd}/${m}/${y}`; };
 const nowTime = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 function normalizeLogin(v:string){ return v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,""); }
@@ -365,6 +370,11 @@ export default function App(){
   const [checklistItems,setChecklistItems]=useState<{id:string,value:ChecklistItemRecord}[]>([]);
   const [taskTemplates,setTaskTemplates]=useState<{id:string,value:TaskTemplate}[]>([]);
   const [credentials,setCredentials]=useState<{id:string,value:CredentialRecord}[]>([]);
+  const [tasks,setTasks]=useState<{id:string,value:TaskRecord}[]>([]);
+  const [logbook,setLogbook]=useState<{id:string,value:LogbookRecord}[]>([]);
+  const [trainings,setTrainings]=useState<{id:string,value:TrainingRecord}[]>([]);
+  const [instructions,setInstructions]=useState<{id:string,value:InstructionRecord}[]>([]);
+  const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
   const [staffEditingId,setStaffEditingId]=useState<string|null>(null);
   const [staffSaving,setStaffSaving]=useState(false);
@@ -577,6 +587,7 @@ export default function App(){
     {key:"dojo_expiries",collection:"dojo_expiries",label:"Validades (dojo_expiries)",fields:[{key:"profile",label:"Perfil"},{key:"date",label:"Data do registro"},{key:"product",label:"Produto"},{key:"expiryDate",label:"Data de validade"}]},
     {key:"dojo_maintenance",collection:"dojo_maintenance",label:"Manutenção (dojo_maintenance)",fields:[{key:"profile",label:"Perfil"},{key:"date",label:"Data"},{key:"itemId",label:"ID do item"},{key:"status",label:"Status",placeholder:"Feito / Não feito"},{key:"note",label:"Observação"}]},
     {key:"dojo_credentials",collection:"dojo_credentials",label:"Funcionários (cadastro de login)",fields:[{key:"profile",label:"Nome"},{key:"login",label:"Login"},{key:"password",label:"Senha"},{key:"station",label:"Estação / setor"},{key:"group",label:"Grupo (cozinha/copa/quiosque)"},{key:"shift",label:"Turno"}]},
+    {key:"dojo_item_instructions",collection:"dojo_item_instructions",label:"Instruções padrão dos itens",fields:[{key:"itemId",label:"ID do item",hint:"Ex.: a-8, hot-1, km-f1"},{key:"text",label:"Instrução / passo a passo",hint:"Aparece no card do item para quem executa."}]},
   ];
   function moduleRowsFor(key:string): {id:string; value:any}[] {
     if (key==="checklists") return checklists;
@@ -594,6 +605,7 @@ export default function App(){
     if (key==="dojo_expiries") return Object.values(expiries);
     if (key==="dojo_maintenance") return Object.values(maintenance);
     if (key==="dojo_credentials") return credentials;
+    if (key==="dojo_item_instructions") return instructions;
     return [];
   }
   function moduleMetaFor(key:string){ return MODULES_META.find(m=>m.key===key) || MODULES_META[0]; }
@@ -683,6 +695,22 @@ export default function App(){
     })();
     return ()=>{ cancelled = true; };
   },[authUser]);
+
+  async function reloadAux(){
+    try{
+      const [t,l,tr,ii] = await Promise.all([
+        api("records.list",{collection:"dojo_tasks",limit:200}),
+        api("records.list",{collection:"dojo_logbook",limit:200}),
+        api("records.list",{collection:"dojo_trainings",limit:200}),
+        api("records.list",{collection:"dojo_item_instructions",limit:500}),
+      ]);
+      setTasks((t.records||[]) as any);
+      setLogbook((l.records||[]) as any);
+      setTrainings((tr.records||[]) as any);
+      setInstructions((ii.records||[]) as any);
+    }catch{}
+  }
+  useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
 
   useEffect(()=>{
     if(!selected) return;
@@ -1259,6 +1287,7 @@ export default function App(){
       if(comingFromFeito) setJustDraft(prev=>({...prev,[item.id]:""}));
       await saveEntry({...cur,status,feito:"0",justificativa:just},{message: just.trim() ? "Item salvo." : "Conte por que não foi feito — justificativa obrigatória para concluir."});
       void ensureActionPlanForItem(item, just);
+      void notifyCritical(item);
       return;
     }
     const hadJust = ((justDraft[item.id] ?? cur.justificativa ?? "").trim()!=="") || cur.status==="Não feito";
@@ -1547,6 +1576,58 @@ export default function App(){
     }catch{ setOfflineMode(true); setStaffMsg("Não foi possível salvar o cadastro. Tente novamente."); }
     setStaffSaving(false);
   }
+  function taskOverdue(t:TaskRecord){
+    if(t.status==="Concluída") return false;
+    return `${t.dueDate}T${t.dueTime||"23:59"}` < nowLocalString();
+  }
+  async function createTask(){
+    if(!isManager){ setMsg("Somente a Gerência cria tarefas."); return; }
+    const title = String(auxForm.taskTitle||"").trim();
+    const owner = String(auxForm.taskOwner||"").trim();
+    if(!title || !owner){ setMsg("Preencha tarefa e responsável."); return; }
+    const value:TaskRecord = { title, owner, dueDate:String(auxForm.taskDate||date), dueTime:String(auxForm.taskTime||"18:00"), status:"Aberta", notes:String(auxForm.taskNotes||"").trim(), createdAt:new Date().toISOString(), createdBy:authUser||"" };
+    try{
+      await api("records.create",{collection:"dojo_tasks",value});
+      await notifyMessage({profile:owner,sender:"Gerência",text:`📌 Nova tarefa: ${title} — até ${fmtDate(value.dueDate)} ${value.dueTime}.`});
+      setAuxForm({}); await reloadAux(); setMsg("Tarefa criada e enviada ao responsável.");
+    }catch{ setMsg("Não foi possível criar a tarefa."); }
+  }
+  async function setTaskStatus(row:{id:string;value:TaskRecord}, status:TaskRecord["status"]){
+    const value = {...row.value,status};
+    try{ await api("records.replace",{collection:"dojo_tasks",id:row.id,value}); await reloadAux(); setMsg(status==="Concluída"?"Tarefa concluída.":"Tarefa reaberta."); }catch{ setMsg("Não foi possível atualizar a tarefa."); }
+  }
+  async function saveLogbook(){
+    if(!isManager){ setMsg("Somente a Gerência escreve no logbook."); return; }
+    const text = String(auxForm.logText||"").trim();
+    if(!text){ setMsg("Escreva o registro do turno."); return; }
+    const value:LogbookRecord = { date, shift:turno, text, author:authUser||"", time:nowTime() };
+    try{ await api("records.create",{collection:"dojo_logbook",value}); setAuxForm(p=>({...p,logText:""})); await reloadAux(); setMsg("Registro salvo no logbook."); }catch{ setMsg("Não foi possível salvar o registro."); }
+  }
+  async function saveTraining(){
+    if(!isManager){ setMsg("Somente a Gerência cadastra treinamentos."); return; }
+    const title = String(auxForm.trainingTitle||"").trim();
+    const person = String(auxForm.trainingPerson||"").trim();
+    if(!title || !person){ setMsg("Preencha treinamento e pessoa."); return; }
+    const value:TrainingRecord = { title, person, status:"Pendente", createdAt:new Date().toISOString() };
+    try{ await api("records.create",{collection:"dojo_trainings",value}); setAuxForm({}); await reloadAux(); setMsg("Treinamento atribuído."); }catch{ setMsg("Não foi possível atribuir."); }
+  }
+  async function setTrainingStatus(row:{id:string;value:TrainingRecord}, status:TrainingRecord["status"]){
+    const value = {...row.value,status};
+    if(status==="Aprovado") value.approvedBy = authUser||"";
+    try{ await api("records.replace",{collection:"dojo_trainings",id:row.id,value}); await reloadAux(); setMsg("Treinamento atualizado."); }catch{ setMsg("Não foi possível atualizar."); }
+  }
+  async function notifyCritical(item:Item){
+    if(!selected) return;
+    const critical = item.section==="Limpeza" || item.section==="Organização" || item.id.startsWith("temp");
+    if(!critical) return;
+    const group = groups.find(g=>g.members.includes(selected))?.key || "";
+    const text = `⚠️ Item crítico não feito — ${selected} · ${item.name}. Gerência, favor conferir.`;
+    try{
+      await api("records.create",{collection:"dojo_chat",value:{profile:"Gerência",sender:selected,text,time:nowTime()}});
+      if(group) await api("records.create",{collection:"dojo_chat",value:{profile:group,sender:selected,text,time:nowTime()}});
+      void notifyMessage({profile:"Gerência",sender:selected,text});
+    }catch{}
+  }
   async function approveChecklist(text:string){
     if(!isManager){ setMsg("Apenas a Gerência pode aprovar."); return; }
     const p = parseChecklist(text);
@@ -1584,6 +1665,10 @@ export default function App(){
   const loginLocked = loginLockedUntil>Date.now();
   const loginLockLeft = loginLocked ? Math.ceil((loginLockedUntil-nowTick)/1000) : 0;
   const dayLabel = date===today() ? "Hoje" : date===addDays(today(),-1) ? "Ontem" : fmtDate(date);
+  const nextPending = useMemo(()=>{
+    if(!selected) return [];
+    return activeSections.flatMap(sec=>countsForSection(sec).list.map(item=>({item,sec,status:entryFor(item.id).status}))).filter(x=>x.status!=="Feito").slice(0,5);
+  },[selected,date,entries,activeSections]);
   const pendingSection = activeSections.find(s=>{ const sub2=submissionForSection(s); const locked2=!!sub2 && (sub2.value.status==="Aguardando" || sub2.value.status==="Aprovado"); return !locked2; });
   const pendingSectionCounts = pendingSection ? countsForSection(pendingSection) : null;
   const latestHandover = useMemo(()=>{
@@ -1722,6 +1807,33 @@ export default function App(){
           {credentials.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum funcionário cadastrado além da equipe inicial.</li> : credentials.map(c=><li key={c.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[15px]">{c.value.profile}</span><span className="text-[12px] text-[var(--muted)]">login {c.value.login}{c.value.station ? ` · ${c.value.station}` : ""}{c.value.group ? ` · ${c.value.group}` : ""}</span><button type="button" onClick={()=>startStaffEdit(c)} className="ml-auto bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Editar login/senha</button></li>)}
         </ul>
       </section>
+      <section className="card p-5 mt-4" aria-label="Próximas pendências">
+        <h3 className="font-extrabold text-[18px]">Próximas pendências</h3>
+        {nextPending.length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Tudo em dia.</p> : <ul className="mt-3 space-y-2">{nextPending.map(({item,sec,status})=><li key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere]">{item.name}</span><span className="text-[12px] text-[var(--muted)]">{displaySectionTitle(sec)} · {status||"sem marcação"}</span><button onClick={()=>{setTab("chat"); setConversation(selected||"");}} className="bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Ver conversa</button></li>)}</ul>}
+      </section>
+      <section className="card p-5 mt-4" aria-label="Tarefas avulsas">
+        <h3 className="font-extrabold text-[18px]">Tarefas avulsas</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Tarefa com responsável e prazo. Vencida, aparece em vermelho e a gerência é avisada.</p>
+        <div className="grid gap-3 mt-4 sm:grid-cols-2">
+          <label className="block"><span className="text-[13px] font-bold">Tarefa</span><input value={auxForm.taskTitle||""} onChange={e=>setAuxForm(p=>({...p,taskTitle:e.target.value}))} placeholder="Ex.: Trocar filtro da coifa" className="field mt-1.5" aria-label="Título da tarefa" /></label>
+          <label className="block"><span className="text-[13px] font-bold">Responsável</span><select value={auxForm.taskOwner||""} onChange={e=>setAuxForm(p=>({...p,taskOwner:e.target.value}))} className="field mt-1.5" aria-label="Responsável da tarefa"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></label>
+          <label className="block"><span className="text-[13px] font-bold">Data</span><input type="date" value={auxForm.taskDate||date} onChange={e=>setAuxForm(p=>({...p,taskDate:e.target.value}))} className="field mt-1.5" aria-label="Data da tarefa" /></label>
+          <label className="block"><span className="text-[13px] font-bold">Hora limite</span><input type="time" value={auxForm.taskTime||"18:00"} onChange={e=>setAuxForm(p=>({...p,taskTime:e.target.value}))} className="field mt-1.5" aria-label="Hora da tarefa" /></label>
+        </div>
+        <button onClick={()=>void createTask()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[14px]">Criar tarefa</button>
+        <ul className="mt-4 space-y-2">{tasks.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma tarefa avulsa.</li> : tasks.map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{row.value.owner} · {fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span>{row.value.status==="Aberta" ? <button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button> : <span className="text-[12px] font-bold text-[var(--success-text)]">Concluída</span>}</li>)}</ul>
+      </section>
+      <section className="card p-5 mt-4" aria-label="Logbook da gerência">
+        <h3 className="font-extrabold text-[18px]">Logbook da gerência</h3>
+        <textarea value={auxForm.logText||""} onChange={e=>setAuxForm(p=>({...p,logText:e.target.value}))} placeholder="Registro do turno: ocorrências, decisões, visitas…" className="field mt-3 min-h-[72px]" aria-label="Texto do logbook" />
+        <button onClick={()=>void saveLogbook()} className="mt-2 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[14px]">Salvar registro</button>
+        <ul className="mt-4 space-y-2">{logbook.slice(0,12).map(row=><li key={row.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="text-[14px] [overflow-wrap:anywhere]">{row.value.text}</p><p className="text-[12px] text-[var(--muted)] mt-0.5">{fmtDate(row.value.date)} · {row.value.shift} · {row.value.author} {row.value.time}</p></li>)}</ul>
+      </section>
+      <section className="card p-5 mt-4" aria-label="Treinamentos">
+        <h3 className="font-extrabold text-[18px]">Treinamentos</h3>
+        <div className="flex flex-wrap gap-2 mt-3"><input value={auxForm.trainingTitle||""} onChange={e=>setAuxForm(p=>({...p,trainingTitle:e.target.value}))} placeholder="Treinamento" className="field flex-1 min-w-[160px]" aria-label="Título do treinamento" /><select value={auxForm.trainingPerson||""} onChange={e=>setAuxForm(p=>({...p,trainingPerson:e.target.value}))} className="field flex-1 min-w-[150px]" aria-label="Pessoa do treinamento"><option value="">Pessoa</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select><button onClick={()=>void saveTraining()} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Atribuir</button></div>
+        <ul className="mt-4 space-y-2">{trainings.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum treinamento atribuído.</li> : trainings.map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{row.value.title} · {row.value.person}</span><span className="text-[12px] text-[var(--muted)]">{row.value.status}</span>{row.value.status!=="Aprovado" && <button onClick={()=>void setTrainingStatus(row,"Aprovado")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Aprovar</button>}</li>)}</ul>
+      </section>
       <section className="card p-5 mt-6" aria-label="Conferência das produções">
         <h3 className="font-extrabold text-[18px]">Conferência das produções — {awaitingList.length} aguardando</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Confira cada produção concluída. Se algo estiver errado, escreva a observação e peça correção — a equipe recebe no chat.</p>
@@ -1800,6 +1912,14 @@ export default function App(){
     {tab==="checklist" && !isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[220px] tab-transition">
       {draftLabel && <div className="mt-5 p-3 rounded-2xl bg-[var(--success-bg)] border border-[var(--success-border)] text-sm font-semibold flex gap-2 items-center" role="status"><Check size={17} className="shrink-0 text-[var(--green)]"/>{draftLabel}<span className="text-[var(--muted)] font-normal">· Salvo automaticamente. Fecha e volta que está tudo aqui.</span></div>}
       {isManager && <section className="mt-5 card p-4 border border-[var(--warning)]"><div className="flex flex-col sm:flex-row sm:items-center gap-3"><div className="flex-1"><p className="text-[13px] font-bold text-[var(--muted)] flex items-center gap-1.5"><ShieldCheck size={15}/> Gerência · modo conferência</p><p className="font-extrabold text-[18px] mt-0.5">Conferindo: {selected} · {selected ? stationMap[selected] : ""}</p><p className="text-[12px] text-[var(--muted)] mt-1 leading-relaxed">A Gerência só confere. Aprove ou peça correção no Chat — o checklist não é editável aqui.</p></div><label className="block w-full sm:w-[240px] shrink-0"><span className="text-[12px] font-bold text-[var(--muted)]">Conferir checklist de</span><select className="field mt-1.5" value={selected||""} onChange={e=>{const v=e.target.value; setSelected(v); setConversation(null); if(KIOSK_NIGHT_PROFILES.includes(v)) setTurno("Noite"); else if(KIOSK_PROFILES.includes(v)) setTurno("Manhã");}}>{staffProfiles.map(p=><option key={p} value={p}>{p} · {stationMap[p]}</option>)}</select></label></div><button type="button" onClick={goToChatForCurrent} className="mt-3 w-full rounded-xl bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold text-[13px] py-3 flex items-center justify-center gap-1.5 pressable"><MessageCircle size={15}/> Abrir conversa com {selected} no Chat</button></section>}
+      <section className="mt-5 card p-5" aria-label="Minhas tarefas">
+        <h3 className="font-extrabold text-[18px]">Minhas tarefas</h3>
+        {tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma tarefa pendente.</p> : <ul className="mt-3 space-y-2">{tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span><button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button></li>)}</ul>}
+      </section>
+      <section className="mt-4 card p-5" aria-label="Meus treinamentos">
+        <h3 className="font-extrabold text-[18px]">Meus treinamentos</h3>
+        {trainings.filter(t=>t.value.person===authUser).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhum treinamento atribuído.</p> : <ul className="mt-3 space-y-2">{trainings.filter(t=>t.value.person===authUser).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{row.value.title}</span><span className="text-[12px] font-bold">{row.value.status}</span>{row.value.status==="Pendente" && <button onClick={()=>void setTrainingStatus(row,"Concluído")} className="bg-white text-black font-bold text-[12px] px-3 py-2 rounded-xl">Marcar concluído</button>}</li>)}</ul>}
+      </section>
 
       <section className="mt-5 card p-5">
         <div>
@@ -1847,7 +1967,7 @@ export default function App(){
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap gap-2 items-center"><span style={{background:fs.background,color:fs.color}} className="text-[11px] font-extrabold px-2.5 py-1 rounded-full">{fs.label}</span><span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full inline-flex items-center gap-1 ${e.status==="Feito"?"bg-[var(--success-bg)] text-[var(--success-text)]":e.status==="Não feito"?"bg-[var(--danger-bg)] text-[var(--danger-text)]":"bg-[var(--surface-2)] text-[var(--muted)]"}`}>{e.status==="Feito" && <Check size={13} strokeWidth={3}/>} {statusLabel(e.status)}</span></div>
-                  <h3 className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere]"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}
+                  <h3 className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere]"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}{instructions.find(i=>i.value.itemId===item.id)?.value?.text && <p className="mt-2 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">📋 {instructions.find(i=>i.value.itemId===item.id)!.value.text}</p>}
                   {(!isKioskSelected || item.section==="Produção do Quiosque") && <p className="text-[12px] text-[var(--muted)] mt-2 leading-relaxed"><span className="font-bold tracking-wide">A PRODUZIR</span> · <span className="[overflow-wrap:anywhere]">{item.target}</span></p>}
                 </div>
               </div>

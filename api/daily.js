@@ -1,4 +1,4 @@
-import { brazilDate, brazilTime, createRecord, listRecords } from "../lib/supabase.js";
+import { brazilDate, brazilDateTime, brazilTime, createRecord, listRecords } from "../lib/supabase.js";
 import { sendPush } from "../lib/push.js";
 
 const BASE_PEOPLE = ["Wesley", "Brianny", "Felipe", "Jessica", "Quitéria", "Nathi", "Eliane", "Michele", "Laís", "Cleide", "Talia", "Tayara", "Paola", "Ricardo"];
@@ -24,11 +24,12 @@ export default async function handler(req, res) {
     const today = brazilDate(0);
     const yesterday = brazilDate(-1);
 
-    const [chats, credentials, catalog, entries] = await Promise.all([
+    const [chats, credentials, catalog, entries, tasks] = await Promise.all([
       listRecords("dojo_chat", 1000),
       listRecords("dojo_credentials", 500),
       listRecords("dojo_item_catalog", 500),
       listRecords("dojo_entries", 1000),
+      listRecords("dojo_tasks", 500),
     ]);
 
     const replaced = new Set(credentials.map((r) => r.value?.replacesProfile).filter(Boolean));
@@ -83,7 +84,22 @@ export default async function handler(req, res) {
       }
     }
 
-    res.status(200).json({ today, yesterday, people: people.length, reminders, summaries, alreadySent: { reminder: has(reminderMarker), summary: has(summaryMarker) } });
+    let overdue = 0;
+    const nowBR = brazilDateTime();
+    for (const row of tasks) {
+      const v = row.value || {};
+      if (v.status !== "Aberta") continue;
+      const deadline = `${v.dueDate || ""}T${v.dueTime || "23:59"}`;
+      if (!v.dueDate || deadline >= nowBR) continue;
+      const marker = `⏰ Tarefa atrasada — ${today} — ${v.title}`;
+      if (has(marker)) continue;
+      const text = `${marker}. Responsável: ${v.owner}. Prazo era ${v.dueDate} ${v.dueTime || ""}.`;
+      await sendChat(v.owner, text);
+      await sendChat("Gerência", text);
+      overdue++;
+    }
+
+    res.status(200).json({ today, yesterday, people: people.length, reminders, summaries, overdue, alreadySent: { reminder: has(reminderMarker), summary: has(summaryMarker) } });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
