@@ -125,6 +125,8 @@ O app suporta três modos, em ordem de prioridade:
 
 Rode `supabase/migrations/20261126000000_lockdown.sql` no SQL Editor do Supabase. Ele revoga `anon`/`authenticated` na tabela `records`, deixando só `service_role`. O cron e o push já usam `service_role`.
 
+**Status:** lockdown já aplicado no projeto de produção via Supabase CLI (`supabase db push --remote --include-all`). Acesso direto com a chave anon retorna `401 permission denied`; o app continua funcionando pelo proxy.
+
 ### Configurando o Supabase
 
 1. No projeto Supabase, abra **SQL Editor** e rode o arquivo [`supabase/migrations/20261125000000_records.sql`](supabase/migrations/20261125000000_records.sql). Ele cria a tabela `records` (`id`, `collection`, `value jsonb`) e políticas RLS.
