@@ -109,6 +109,18 @@ git push -u origin main
 
 Para GitHub Pages, rode `npm run build` e publique `dist/`. Lembre-se de disponibilizar a rota `actions` no mesmo domínio (ou ajuste o `fetch` em `src/App.tsx` para a URL do seu backend).
 
+### Deploy na Vercel
+
+O `.env.local` vale apenas na sua máquina. Na Vercel, configure as variáveis no projeto (painel **Settings → Environment Variables** ou CLI):
+
+```bash
+vercel env add VITE_SUPABASE_URL -e production -e preview -e development
+vercel env add VITE_SUPABASE_ANON_KEY -e production -e preview -e development
+vercel --prod
+```
+
+As variáveis são lidas durante o build — depois de alterá-las, faça um novo deploy. Sem elas, o app cai no modo local e a rota `actions` retorna 404 ("Conexão: erro").
+
 ## Licença
 
 MIT — veja `LICENSE`.
