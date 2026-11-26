@@ -74,11 +74,28 @@ function handle(req: any, res: any) {
   });
 }
 
+function handlePush(req: any, res: any) {
+  // Em dev o push real depende das variáveis da Vercel; aqui é no-op.
+  res.setHeader("content-type", "application/json");
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+  } else {
+    res.end(JSON.stringify({ sent: 0, failed: 0 }));
+  }
+}
+
 function dojoApi(): Plugin {
   return {
     name: "dojo-local-api",
-    configureServer(server) { server.middlewares.use("/actions", handle); },
-    configurePreviewServer(server) { server.middlewares.use("/actions", handle); },
+    configureServer(server) {
+      server.middlewares.use("/actions", handle);
+      server.middlewares.use("/api/push", handlePush);
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use("/actions", handle);
+      server.middlewares.use("/api/push", handlePush);
+    },
   };
 }
 

@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, LayoutDashboard, MessageCircle, Send, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, TrendingUp, Activity, Users, ShieldCheck } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, LayoutDashboard, MessageCircle, Send, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, TrendingUp, Activity, Users, ShieldCheck, Bell } from "lucide-react";
+import { api } from "./api";
+import { enablePush, notifyMessage, pushSupported } from "./push";
 
 type Freq = "DIÁRIO" | "SEMANAL" | "MENSAL";
 type Status = "Feito" | "Não feito" | "";
@@ -226,54 +228,6 @@ function sectionsForProfile(p:string): Section[] {
   return SECTIONS;
 }
 
-async function api(action:string,args:any){
-  const supabaseUrl = String(import.meta.env.VITE_SUPABASE_URL||"").replace(/\/$/,"");
-  const supabaseKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY||"");
-
-  if(supabaseUrl && supabaseKey){
-    const headers:Record<string,string> = {
-      "apikey": supabaseKey,
-      "Authorization": `Bearer ${supabaseKey}`,
-      "Content-Type": "application/json",
-      "Prefer": "return=representation",
-    };
-    const collection = String(args?.collection||"");
-    const base = `${supabaseUrl}/rest/v1/records`;
-    const fail = async (res:Response) => {
-      const body = await res.json().catch(()=>({}));
-      throw new Error(body.message || body.error || `Falha na conexão (${res.status})`);
-    };
-    const filter = (extra:string) => `${base}?collection=eq.${encodeURIComponent(collection)}${extra}`;
-    if(action==="records.list"){
-      const res = await fetch(filter(`&select=id,value&limit=${Math.min(Number(args?.limit)||200,1000)}`),{headers});
-      if(!res.ok) return await fail(res);
-      const rows:any[] = await res.json();
-      return { records: (Array.isArray(rows)?rows:[]).map(r=>({id:r.id,value:r.value})) };
-    }
-    if(action==="records.create"){
-      const res = await fetch(base,{method:"POST",headers,body:JSON.stringify({collection,value:args.value})});
-      if(!res.ok) return await fail(res);
-      const rows:any[] = await res.json();
-      return { id: rows?.[0]?.id || `${collection}-${Date.now()}` };
-    }
-    if(action==="records.replace"){
-      const res = await fetch(filter(`&id=eq.${encodeURIComponent(String(args.id))}`),{method:"PATCH",headers,body:JSON.stringify({value:args.value})});
-      if(!res.ok) return await fail(res);
-      return {};
-    }
-    if(action==="records.delete"){
-      const res = await fetch(filter(`&id=eq.${encodeURIComponent(String(args.id))}`),{method:"DELETE",headers});
-      if(!res.ok) return await fail(res);
-      return {};
-    }
-    throw new Error(`Ação desconhecida: ${action}`);
-  }
-
-  const res = await fetch("actions",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action,args})});
-  const json = await res.json().catch(()=>({}));
-  if(!res.ok || json.error) throw new Error(json.error || `Falha na conexão (${res.status})`);
-  return json.data;
-}
 function complianceColor(pct:number){ if(pct>=90) return "var(--green)"; if(pct>=70) return "var(--warning)"; return "var(--danger)"; }
 function drawQrCode(canvas:HTMLCanvasElement,text:string){
   const modules=29, quiet=4, size=modules+quiet*2, cell=10;
@@ -495,6 +449,8 @@ export default function App(){
   const [lockedUntil,setLockedUntil]=useState<Record<string,number>>({});
   const [nowTick,setNowTick]=useState(Date.now());
   const [theme,setTheme]=useState<"light"|"dark">(()=>{ try{ const stored=localStorage.getItem("dojo-theme"); if(stored==="dark"||stored==="light") return stored; return "dark"; }catch{ return "dark"; } });
+  const [pushOn,setPushOn]=useState(false);
+  const [pushBusy,setPushBusy]=useState(false);
   useEffect(()=>{ try{ document.documentElement.dataset.theme=theme; localStorage.setItem("dojo-theme",theme); }catch{} },[theme]);
   const [toast,setToast]=useState<{text:string;undo?:()=>void}|null>(null);
   const [photoViewer,setPhotoViewer]=useState<{src:string;label:string;onDelete?:()=>void}|null>(null);
@@ -522,6 +478,17 @@ export default function App(){
     return list;
   },[credentials,replacedProfiles]);
   const haptic = (ms=8) => { try { navigator.vibrate?.(ms); } catch {} };
+  async function handleEnablePush(){
+    if(!authUser || !pushSupported()){ setMsg("Notificações não suportadas neste navegador."); return; }
+    setPushBusy(true);
+    try{
+      const myGroups = groups.filter(g=>g.members.includes(authUser)).map(g=>g.key);
+      await enablePush(authUser, myGroups);
+      setPushOn(true);
+      setMsg("Notificações ativadas neste aparelho.");
+    }catch(err){ setMsg(err instanceof Error ? err.message : "Não foi possível ativar as notificações."); }
+    setPushBusy(false);
+  }
   // Gerência = somente conferência. Ninguém edita o checklist de outra pessoa.
   const readOnly = isManager;
   useEffect(()=>{
@@ -1344,7 +1311,7 @@ export default function App(){
     const value:ChatMsg={profile,sender,text,time:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})};
     const localId = `local-chat-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     setChat(prev=>[...prev,{id:localId,value}]);
-    try{ await api("records.create",{collection:"dojo_chat",value,idempotency_key:`dojo-chat-${Date.now()}-${Math.random().toString(36).slice(2)}`}); await reloadRecords(); setOfflineMode(false); }catch{ setOfflineMode(true); }
+    try{ await api("records.create",{collection:"dojo_chat",value,idempotency_key:`dojo-chat-${Date.now()}-${Math.random().toString(36).slice(2)}`}); void notifyMessage({profile,sender,text}); await reloadRecords(); setOfflineMode(false); }catch{ setOfflineMode(true); }
   }
 
   useEffect(()=>{
@@ -1650,6 +1617,7 @@ export default function App(){
         <span className="w-10 h-10 rounded-full grid place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
         <div className="min-w-0 flex-1 leading-tight"><div className="font-extrabold tracking-tight text-[17px] sm:text-[19px] truncate">Olá, {authUser} — {stationMap[authUser||""]}</div><div className="text-[12px] sm:text-[13px] text-[var(--muted)] mt-0.5 truncate">{fmtDate(date)} · {perfil} · {turno}{isManager && selected && selected!==authUser ? ` · Conferindo: ${selected}` : ""}</div></div>
         <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
+        <button type="button" disabled={pushBusy} onClick={()=>void handleEnablePush()} title="Ativar notificações de mensagens" aria-label={pushOn?"Notificações ativas":"Ativar notificações"} className={`shrink-0 w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full border pressable ${pushOn?"bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]":"bg-[var(--surface-2)] border-[var(--line)] text-[var(--ink)]"}`}><Bell size={18}/></button>
         {themeButton}
         <button onClick={handleLogout} className="shrink-0 bg-white text-black font-bold text-[12px] sm:text-[13px] px-3 py-2 rounded-full whitespace-nowrap flex items-center gap-1 pressable"><LogOut size={14}/> <span className="hidden sm:inline">Sair</span></button>
       </div>

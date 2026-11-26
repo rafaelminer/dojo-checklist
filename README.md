@@ -47,6 +47,27 @@ A gerência pode **editar login e senha** de qualquer pessoa, inclusive da equip
 - Botões de aprovar/pedir correção aparecem apenas na conversa 1:1 com a Gerência.
 - Funcionários cadastrados com grupo entram automaticamente no grupo correspondente.
 
+## Notificações push
+
+O app registra um service worker (`public/sw.js`) e envia notificações reais quando uma mensagem chega, mesmo com o app fechado.
+
+- **iPhone:** abra o site no **Safari** → botão Compartilhar → **Adicionar à Tela Inicial** → abra o ícone instalado.
+- **Android:** abra no **Chrome** → menu → **Instalar app** / **Adicionar à tela inicial**.
+- No app, toque no **sino** no cabeçalho e permita notificações. O registro é salvo em `dojo_push_subscriptions` no Supabase.
+
+Variáveis de ambiente necessárias no servidor (Vercel):
+
+```bash
+vercel env add VITE_VAPID_PUBLIC_KEY -e production -e preview -e development
+vercel env add VAPID_PUBLIC_KEY -e production -e preview -e development
+vercel env add VAPID_PRIVATE_KEY -e production -e preview -e development
+vercel env add VAPID_SUBJECT -e production -e preview -e development
+vercel env add SUPABASE_URL -e production -e preview -e development
+vercel env add SUPABASE_ANON_KEY -e production -e preview -e development
+```
+
+`VITE_VAPID_PUBLIC_KEY` e `VAPID_PUBLIC_KEY` recebem a **mesma** chave pública. A chave privada fica só no servidor. A função `api/push.js` envia o push para as inscrições do destinatário (ou do grupo) e nunca para quem enviou.
+
 ## Fotos
 
 Tirar foto (câmera), escolher da galeria, pré-visualizar, excluir e desfazer exclusão. Fotos são comprimidas antes de salvar no registro.
