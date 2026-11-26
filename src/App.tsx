@@ -421,6 +421,8 @@ export default function App(){
   const [stationQrInfo,setStationQrInfo]=useState<{label:string;url:string}>({label:"",url:""});
   const [productItem,setProductItem]=useState<Item|null>(null);
   const [listening,setListening]=useState(false);
+  const [quickEntryOpen,setQuickEntryOpen]=useState(false);
+  const [quickEntryText,setQuickEntryText]=useState("");
   const qrCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const stationQrCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const chatScrollRef=useRef<HTMLDivElement|null>(null);
@@ -1756,6 +1758,7 @@ export default function App(){
     const num = text.match(/\b(\d{1,4})\b/)?.[1];
     await setStatus(match,"Feito");
     if(num) await saveFeito(match,num);
+    setQuickEntryOpen(false); setQuickEntryText("");
     setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
   }
   function startVoice(){
@@ -2041,7 +2044,7 @@ export default function App(){
           {selected && shifts[`${selected}|${date}`]?.value && <div className="mt-2 text-[13px] leading-relaxed text-[var(--muted)]"><p>Iniciado às {shifts[`${selected}|${date}`]?.value.startedAt} — por {shifts[`${selected}|${date}`]?.value.startedBy}</p>{shifts[`${selected}|${date}`]?.value.finishedAt && <p>Concluído às {shifts[`${selected}|${date}`]?.value.finishedAt} — por {shifts[`${selected}|${date}`]?.value.finishedBy}</p>}</div>}
         </div>
         <button type="button" onClick={()=>setOnlyMissing(!onlyMissing)} aria-pressed={onlyMissing} className={`mt-4 w-full rounded-2xl py-3.5 text-[15px] font-extrabold pressable ${onlyMissing ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{onlyMissing ? "✓ Só o que falta" : "Só o que falta"}</button>
-        <button type="button" disabled={listening||readOnly} onClick={startVoice} className="mt-2 w-full rounded-2xl border border-[var(--line)] bg-[var(--surface-2)] py-3.5 text-[14px] font-extrabold flex items-center justify-center gap-2 pressable disabled:opacity-60"><Mic size={17} className={listening?"text-[var(--danger)]":"text-[var(--primary)]"} />{listening ? "Ouvindo… diga o item e a quantidade" : "Falar item (mãos ocupadas)"}</button>
+        <button type="button" disabled={readOnly} onClick={()=>setQuickEntryOpen(true)} className="mt-2 w-full rounded-2xl border border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] py-3.5 text-[14px] font-extrabold flex items-center justify-center gap-2 pressable"><Mic size={18}/> Falar ou anotar item</button>
         <div className="flex flex-col gap-4 mt-5">
           <div className="block"><span className="text-[13px] font-bold text-[var(--muted)] flex items-center gap-1"><CalendarDays size={14}/> Data</span><div className="mt-2 flex items-center gap-2" aria-label="Navegar entre dias"><button type="button" onClick={()=>setDate(addDays(date,-1))} className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] grid place-items-center shrink-0" aria-label="Dia anterior"><ChevronLeft size={20}/></button><div className="flex-1 grid grid-cols-2 gap-1.5" role="group" aria-label="Ontem ou hoje">{([["Ontem",addDays(today(),-1)],["Hoje",today()]] as const).map(([label,val])=>(<button key={label} type="button" onClick={()=>setDate(val)} className={`min-h-[44px] rounded-full text-[13px] sm:text-[14px] font-extrabold px-1 ${date===val ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{label}</button>))}</div></div></div>
           {isManager ? <div className="grid grid-cols-2 gap-3 text-[13px]"><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Perfil</span><b>{perfil}</b></div><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Turno</span><b>{turno}</b></div></div> : <><label className="block"><span className="text-[13px] font-bold text-[var(--muted)]">Perfil</span><select className="field mt-2" value={perfil} onChange={e=>setPerfil(e.target.value)}><option>Fraco</option><option>Normal</option><option>Forte</option></select></label>
@@ -2306,6 +2309,16 @@ export default function App(){
           {photoViewer.onDelete && <button onClick={()=>photoViewer.onDelete?.()} className="flex-1 bg-[var(--danger)] text-white font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-1.5 pressable"><Trash2 size={16}/> Excluir foto</button>}
           <button onClick={()=>setPhotoViewer(null)} className="flex-1 bg-white/15 text-white font-extrabold py-3.5 rounded-2xl pressable">Fechar</button>
         </div>
+      </div>
+    </div>}
+    {authUser && quickEntryOpen && <div className="fixed inset-0 z-[66] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Falar ou anotar item">
+      <div className="w-full sm:max-w-[460px] card p-5 sheet rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Mãos ocupadas</p><h2 className="font-extrabold text-[21px] mt-1">Falar ou anotar item</h2></div><button onClick={()=>{setQuickEntryOpen(false);setListening(false);}} aria-label="Fechar" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
+        <p className="text-[13px] text-[var(--muted)] mt-2 leading-relaxed">Diga ou escreva o nome do produto e a quantidade. Exemplo: <b>Ebi Hot 12</b>. O item será marcado como Feito.</p>
+        {(typeof window!=="undefined" && !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition) && <button type="button" disabled={listening} onClick={startVoice} className="w-full mt-4 bg-[var(--primary)] text-white font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60"><Mic size={18}/>{listening?"Ouvindo… fale agora":"🎤 Falar item"}</button>}
+        <label className="block mt-4"><span className="text-[13px] font-bold">Ou digite</span><input autoFocus value={quickEntryText} onChange={e=>setQuickEntryText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&quickEntryText.trim()) void handleVoice(quickEntryText.trim());}} placeholder="Ex.: Ebi Hot 12" className="field mt-2" aria-label="Item e quantidade" /></label>
+        <div className="flex gap-2 mt-3"><button onClick={()=>setQuickEntryOpen(false)} className="flex-1 bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Cancelar</button><button disabled={!quickEntryText.trim()} onClick={()=>void handleVoice(quickEntryText.trim())} className="flex-1 bg-[var(--green)] text-white font-extrabold py-3 rounded-2xl disabled:opacity-50">Aplicar</button></div>
+        <p className="text-[11px] text-[var(--muted)] mt-3">Se o microfone não funcionar no seu navegador, use o campo de texto — faz a mesma coisa.</p>
       </div>
     </div>}
     {authUser && productItem && <div className="fixed inset-0 z-[65] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Ficha — ${productItem.name}`}>
