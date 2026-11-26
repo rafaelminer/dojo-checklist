@@ -1635,13 +1635,18 @@ export default function App(){
   return <div data-safe-area-inset-root className="app-shell overflow-x-clip" style={{boxSizing:"border-box",paddingTop:"var(--safe-area-inset-top)",minHeight:"100dvh"}}>
     {!authUser ? loginContent : <>
     {!isChatDetail && <header data-safe-area-sticky-top style={{top:"var(--safe-area-inset-top)"}} className="app-header sticky z-30 border-b border-[var(--line)]">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3">
         <span className="w-10 h-10 rounded-full grid place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
-        <div className="min-w-0 flex-1 leading-tight"><div className="font-extrabold tracking-tight text-[17px] sm:text-[19px] truncate">Olá, {authUser} — {stationMap[authUser||""]}</div><div className="text-[12px] sm:text-[13px] text-[var(--muted)] mt-0.5 truncate">{fmtDate(date)} · {perfil} · {turno}{isManager && selected && selected!==authUser ? ` · Conferindo: ${selected}` : ""}</div></div>
-        <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
-        <button type="button" disabled={pushBusy} onClick={()=>void handleEnablePush()} title="Ativar notificações de mensagens" aria-label={pushOn?"Notificações ativas":"Ativar notificações"} className={`shrink-0 w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full border pressable ${pushOn?"bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]":"bg-[var(--surface-2)] border-[var(--line)] text-[var(--ink)]"}`}><Bell size={18}/></button>
-        {themeButton}
-        <button onClick={handleLogout} className="shrink-0 bg-white text-black font-bold text-[12px] sm:text-[13px] px-3 py-2 rounded-full whitespace-nowrap flex items-center gap-1 pressable"><LogOut size={14}/> <span className="hidden sm:inline">Sair</span></button>
+        <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] sm:basis-auto leading-tight">
+          <div className="font-extrabold tracking-tight text-[16px] sm:text-[19px] truncate">Olá, {authUser}</div>
+          <div className="text-[11px] sm:text-[13px] text-[var(--muted)] mt-0.5 truncate">{fmtDate(date)} · {perfil} · {turno}{isManager && selected && selected!==authUser ? ` · Conferindo: ${selected}` : ""}</div>
+        </div>
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
+          <button type="button" disabled={pushBusy} onClick={()=>void handleEnablePush()} title="Ativar notificações de mensagens" aria-label={pushOn?"Notificações ativas":"Ativar notificações"} className={`w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full border pressable ${pushOn?"bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]":"bg-[var(--surface-2)] border-[var(--line)] text-[var(--ink)]"}`}><Bell size={18}/></button>
+          {themeButton}
+          <button onClick={handleLogout} aria-label="Sair" className="bg-white text-black font-bold text-[12px] sm:text-[13px] px-3 py-2 rounded-full whitespace-nowrap flex items-center gap-1 pressable"><LogOut size={14}/> <span className="hidden sm:inline">Sair</span></button>
+        </div>
       </div>
     </header>}
 
@@ -1816,7 +1821,7 @@ export default function App(){
         const statusText = sub ? (sub.value.status==="Aguardando" ? "Aguardando conferência da Gerência no Chat" : sub.value.status==="Aprovado" ? "Aprovado pela Gerência" : "Para corrigir — ajuste os itens e conclua de novo") : "";
         const isPistaSection = ["Montagem da Pista - Fria","Montagem da Pista - Quente","Reposição da Pista - Fria","Reposição da Pista - Quente"].includes(sec);
         return <section key={sec} id={`secao-${sec}`} className="mt-8">
-          <div className="sticky z-10 bg-[var(--bg)] py-2 -mx-1 px-1" style={{top:"calc(var(--safe-area-inset-top) + 66px)"}}>
+          <div className="sticky z-10 bg-[var(--bg)] py-2 -mx-1 px-1" style={{top:"calc(var(--safe-area-inset-top) + var(--header-h))"}}>
             <div className="flex items-baseline justify-between gap-2 flex-wrap">
               <div className="min-w-0">
                 {isPistaSection ? <button type="button" onClick={()=>setGuideOpen(prev=>({...prev,[sec]:!prev[sec]}))} aria-expanded={!!guideOpen[sec]} className="text-left"><h2 className="font-extrabold text-[20px] leading-tight">{displaySectionTitle(sec)} — {counts.done}/{counts.total} feitos <span className="text-[13px] font-extrabold text-[var(--warning-text)] whitespace-nowrap">{guideOpen[sec] ? "Ocultar mapa ▲" : "Ver mapa da pista ▸"}</span></h2></button> : <h2 className="font-extrabold text-[20px] leading-tight">{displaySectionTitle(sec)} — {counts.done}/{counts.total} feitos</h2>}
@@ -1994,13 +1999,13 @@ export default function App(){
       </div>
     </div>}
 
-    {tab==="checklist" && !isChatDetail && !isManager && <div className="fixed bottom-[72px] inset-x-0 z-30 bg-[var(--bg)]/95 backdrop-blur border-t border-[var(--line)]">
+    {tab==="checklist" && !isChatDetail && !isManager && <div className="fixed bottom-[calc(72px+env(safe-area-inset-bottom))] inset-x-0 z-30 bg-[var(--bg)]/95 backdrop-blur border-t border-[var(--line)]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
         <div className="min-w-0 flex-1 leading-tight"><p className="font-extrabold text-[15px] truncate">{pendingSection ? `${displaySectionTitle(pendingSection)} — ${pendingSectionCounts?.done}/${pendingSectionCounts?.total} feitos` : "Tudo concluído"}</p><p className="text-[12px] text-[var(--muted)]">{pendingSection ? ((pendingSectionCounts?.pending||0)>0 ? `Faltam ${pendingSectionCounts?.pending} itens` : "Pronto para concluir") : "Enviado para conferência"}</p></div>
         {pendingSection ? <button disabled={saving || (pendingSectionCounts?.pending||0)>0} onClick={()=>completeSectionFor(pendingSection)} className="shrink-0 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3.5 text-[15px] disabled:opacity-50 pressable">Concluir <span className="hidden sm:inline">{displaySectionTitle(pendingSection)}</span><span className="sm:hidden">seção</span></button> : <button onClick={goToChatForCurrent} className="shrink-0 bg-white text-black font-extrabold rounded-2xl px-5 py-3.5 text-[15px] pressable">Ir para o Chat →</button>}
       </div>
     </div>}
-    {!isChatDetail && !reproveFor && <nav className="fixed bottom-0 inset-x-0 z-30 bg-[var(--bg)] border-t border-[var(--line)] h-[72px]">
+    {!isChatDetail && !reproveFor && <nav className="fixed bottom-0 inset-x-0 z-30 bg-[var(--bg)] border-t border-[var(--line)] h-[calc(72px+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)]">
       <div className={`max-w-6xl mx-auto px-4 grid h-full ${navItems.length===4?"grid-cols-4":"grid-cols-3"}`}>
         {navItems.map(t=>{
           const Icon=t.icon; const active=tab===t.id;
