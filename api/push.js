@@ -1,6 +1,4 @@
-import { createRequire } from "node:module";
-const require = createRequire(import.meta.url);
-const webpush = require("web-push");
+import { setVapidDetails, sendNotification } from "web-push";
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_KEY = String(process.env.SUPABASE_ANON_KEY || "");
@@ -49,7 +47,7 @@ export default async function handler(req, res) {
         return v.profile === profile;
       });
 
-    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+    setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
     const payload = JSON.stringify({
       title: `Dojo — ${sender}`,
       body: String(text).slice(0, 180),
@@ -57,7 +55,7 @@ export default async function handler(req, res) {
       tag: `dojo-${Date.now()}`,
     });
 
-    const results = await Promise.allSettled(targets.map((v) => webpush.sendNotification(v.subscription, payload)));
+    const results = await Promise.allSettled(targets.map((v) => sendNotification(v.subscription, payload)));
     const sent = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.length - sent;
     res.status(200).json({ sent, failed });
