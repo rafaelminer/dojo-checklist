@@ -1,4 +1,6 @@
-import webpush from "web-push";
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+const webpush = require("web-push");
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SUPABASE_KEY = String(process.env.SUPABASE_ANON_KEY || "");
