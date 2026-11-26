@@ -40,7 +40,7 @@ const GROUP_CHANNELS: { key:string; name:string; desc:string; members:string[] }
   { key:"grupo:quiosque", name:"Quiosque", desc:"Quiosque · manhã e noite", members:["Laís","Cleide","Talia","Tayara"] },
 ];
 const groupKeyFor = (person:string) => GROUP_CHANNELS.find(g=>g.members.includes(person))?.key || "";
-const today = () => new Date().toISOString().slice(0,10);
+const today = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const fmtDate = (d:string) => { const [y,m,dd]=d.split("-"); return `${dd}/${m}/${y}`; };
 const nowTime = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 function normalizeLogin(v:string){ return v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,""); }
