@@ -16,6 +16,26 @@ export function pushSupported() {
   return typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
 }
 
+export async function getPushStatus() {
+  const supported = pushSupported();
+  let subscribed = false;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration("/sw.js");
+    if (reg) subscribed = !!(await reg.pushManager.getSubscription());
+  } catch {
+    subscribed = false;
+  }
+  const standalone = typeof window !== "undefined" &&
+    (window.matchMedia("(display-mode: standalone)").matches || (navigator as any).standalone === true);
+  return {
+    supported,
+    subscribed,
+    standalone,
+    permission: supported ? Notification.permission : "unsupported",
+    isIOS: typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent),
+  };
+}
+
 export async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return null;
   const reg = await navigator.serviceWorker.register("/sw.js");

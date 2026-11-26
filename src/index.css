@@ -253,15 +253,7 @@ a { color: var(--primary); }
   70% { transform: scale(1.15); }
   100% { transform: scale(1); opacity: 1; }
 }
-.wa-pattern {
-  background-color: #0b141a;
-  background-image: radial-gradient(rgba(255, 255, 255, .045) 1px, transparent 1px);
-  background-size: 22px 22px;
-}
-.no-scrollbar::-webkit-scrollbar { display: none; }
-.no-scrollbar { scrollbar-width: none; }
-
-/* ---------- Camada 2026: glass, bento, movimento ---------- */
+/* ---------- Superfícies e movimento ---------- */
 .app-shell {
   background-color: var(--bg);
   background-image:
@@ -284,100 +276,6 @@ a { color: var(--primary); }
 }
 :root[data-theme="dark"] .glass {
   box-shadow: 0 14px 44px rgba(0, 0, 0, .46), inset 0 1px 0 rgba(255, 255, 255, .08);
-}
-.hero {
-  position: relative;
-  overflow: hidden;
-  border-radius: 28px;
-  padding: 22px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 13%, var(--surface)), var(--surface) 58%);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-}
-.hero::after {
-  content: "";
-  position: absolute;
-  right: -28%;
-  bottom: -70%;
-  width: 72%;
-  height: 150%;
-  background: radial-gradient(circle at center, color-mix(in srgb, var(--primary) 26%, transparent), transparent 66%);
-  pointer-events: none;
-}
-.stat-tile {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  border-radius: 20px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  min-width: 0;
-}
-.stat-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 13px;
-  display: grid;
-  place-items: center;
-  flex: none;
-}
-.action-tile {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 10px 14px;
-  border-radius: 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  box-shadow: var(--shadow);
-  font-size: 13px;
-  font-weight: 800;
-  color: var(--ink);
-  white-space: nowrap;
-  transition: transform .16s, box-shadow .16s;
-}
-.action-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 24px rgba(16,24,40,.12); }
-.action-tile .action-ico {
-  width: 30px; height: 30px; border-radius: 10px;
-  display: grid; place-items: center;
-  background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: var(--primary);
-  flex: none;
-}
-.nav-float {
-  background: color-mix(in srgb, var(--surface) 80%, transparent);
-  backdrop-filter: blur(26px) saturate(190%);
-  -webkit-backdrop-filter: blur(26px) saturate(190%);
-  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
-  border-radius: 26px;
-  box-shadow: 0 18px 50px rgba(16, 24, 40, .18), inset 0 1px 0 rgba(255, 255, 255, .5);
-}
-:root[data-theme="dark"] .nav-float { box-shadow: 0 18px 50px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255,255,255,.08); }
-.nav-item {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  min-height: 54px;
-  border-radius: 20px;
-  color: var(--muted);
-  transition: color .18s, background .18s, transform .18s;
-}
-.nav-item:active { transform: scale(.94); }
-.nav-item.active {
-  color: var(--primary);
-  background: color-mix(in srgb, var(--primary) 11%, transparent);
-}
-.nav-item .nav-dot {
-  position: absolute;
-  top: 6px;
-  width: 4px; height: 4px; border-radius: 999px;
-  background: var(--primary);
 }
 .toast {
   animation: toastIn .3s cubic-bezier(.2,.9,.2,1) both;
@@ -413,19 +311,8 @@ a { color: var(--primary); }
 }
 .photo-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .3s ease; }
 .photo-thumb:hover img { transform: scale(1.04); }
-.quick-check {
-  border: 1px solid var(--line);
-  background: var(--surface-inset);
-  color: var(--ink);
-  transition: background .2s, color .2s, border-color .2s, transform .15s;
-}
-.quick-check:active { transform: scale(.92); }
-.quick-check.done { background: var(--green); border-color: transparent; color: #fff; }
-.quick-check.miss { background: var(--danger); border-color: transparent; color: #fff; }
 .item-card.is-done { background: color-mix(in srgb, var(--success-bg) 72%, var(--surface)); }
 .item-card.is-miss { background: color-mix(in srgb, var(--danger-bg) 72%, var(--surface)); }
-.ring-value { transition: stroke-dashoffset .8s cubic-bezier(.2,.8,.2,1); }
-.divide-line > * + * { border-top: 1px solid var(--line); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

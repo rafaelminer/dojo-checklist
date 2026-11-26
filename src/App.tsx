@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ClipboardCheck, LayoutDashboard, MessageCircle, Send, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, TrendingUp, Activity, Users, ShieldCheck, Bell } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, Search, X, ArrowRight, Activity, Users, ShieldCheck, Bell } from "lucide-react";
 import { api } from "./api";
-import { enablePush, notifyMessage, pushSupported } from "./push";
+import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 
 type Freq = "DIÁRIO" | "SEMANAL" | "MENSAL";
 type Status = "Feito" | "Não feito" | "";
@@ -18,7 +18,6 @@ type WeeklySubmission = { profile: string; weekKey: string; date: string; items:
 type ExpiryEntry = { profile: string; date: string; product: string; expiryDate: string; registeredAt: string };
 type MaintEntry = { profile: string; date: string; itemId: string; status: Status; note: string };
 type CredentialRecord = { login: string; profile: string; password: string; station?: string; group?: string; shift?: string; replaces?: string; replacesProfile?: string };
-type RememberRecord = { login: string; profile: string };
 type TempEntry = { profile: string; date: string; fria: string; freezer: string };
 type ShiftEntry = { profile: string; date: string; startedAt: string; startedBy: string; finishedAt?: string; finishedBy?: string };
 type RecordRow = { id: string; value: any };
@@ -39,7 +38,6 @@ const GROUP_CHANNELS: { key:string; name:string; desc:string; members:string[] }
   { key:"grupo:copa", name:"Copa", desc:"Copa e apoio", members:["Paola","Ricardo"] },
   { key:"grupo:quiosque", name:"Quiosque", desc:"Quiosque · manhã e noite", members:["Laís","Cleide","Talia","Tayara"] },
 ];
-const groupKeyFor = (person:string) => GROUP_CHANNELS.find(g=>g.members.includes(person))?.key || "";
 const today = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
 const fmtDate = (d:string) => { const [y,m,dd]=d.split("-"); return `${dd}/${m}/${y}`; };
 const nowTime = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
@@ -82,18 +80,6 @@ const blocoB:Item[]=[
 const quente:Item[]=[
  prod("q-1","Camarão quente","Conforme demanda","DIÁRIO"), prod("q-2","Salmão quente","Conforme demanda","DIÁRIO"), prod("q-3","Frango","Conforme demanda","DIÁRIO"), prod("q-4","Alho-poró","Conforme demanda","DIÁRIO"), prod("q-5","Yakisoba","Conforme demanda","DIÁRIO"), prod("q-6","Pipoca fish","Conforme demanda","DIÁRIO"), prod("q-7","Molhos da cozinha quente","Padrões do dia","DIÁRIO"),
  prod("q-8","Semanal · Gergelim","Estoque conferido","SEMANAL"), prod("q-9","Semanal · Amêndoas","Estoque conferido","SEMANAL"), prod("q-10","Semanal · Brigadeiro","Produção semanal","SEMANAL"), prod("q-11","Semanal · Taco","30 un.","SEMANAL"), prod("q-12","Semanal · Gyoza filé","60 un.","SEMANAL"), prod("q-13","Semanal · Ponzu","5 L","SEMANAL"), prod("q-14","Semanal · Molho Chef","5 L","SEMANAL"), prod("q-15","Semanal · Teriyaki","Produção semanal","SEMANAL"), prod("q-16","Semanal · Chari","Produção semanal","SEMANAL"), prod("q-17","Semanal · Crispys","Produção semanal","SEMANAL"), prod("q-18","Semanal · Tonkatsu","Produção semanal","SEMANAL"),
- prod("q-19","Rotina · Cocção e ponto","Conferido","DIÁRIO","Temperatura, textura e sabor validados."), prod("q-20","Rotina · Reposição e mise en place","Estação pronta","DIÁRIO"),
-];
-const kioskManha:Item[]=[
- prod("km-f1","Salmão Poró","15 un.","DIÁRIO","Fria"), prod("km-f2","Makimagu","15 un.","DIÁRIO","Fria"), prod("km-f3","Spice Roll","15 un.","DIÁRIO","Fria"), prod("km-f4","Kani Cheese","10 un.","DIÁRIO","Fria"), prod("km-f5","Dual Fish","10 un.","DIÁRIO","Fria"), prod("km-f6","Ebi Crush","10 un.","DIÁRIO","Fria"), prod("km-f7","Jatopeia","10 un.","DIÁRIO","Fria"), prod("km-f8","Maki Fish","10 un.","DIÁRIO","Fria"), prod("km-f9","Uramaki Philadelphia","10 un.","DIÁRIO","Fria"), prod("km-f10","Philadelphia","10 un.","DIÁRIO","Fria"),
- prod("km-q1","Hot Haddock","15 un.","DIÁRIO","Quente"), prod("km-q2","Hot Couve","10 un.","DIÁRIO","Quente"), prod("km-q3","Saumatro","10 un.","DIÁRIO","Quente"), prod("km-q4","Hot Salmão Crush","12 un.","DIÁRIO","Quente"), prod("km-q5","Hot Atum Crush","12 un.","DIÁRIO","Quente"), prod("km-q6","Hot Camarão Crush","12 un.","DIÁRIO","Quente"), prod("km-q7","Hot Maguru","10 un.","DIÁRIO","Quente"), prod("km-q8","Kani Crocante","10 un.","DIÁRIO","Quente"), prod("km-q9","Nipo","10 un.","DIÁRIO","Quente"), prod("km-q10","Hot Philadelphia","10 un.","DIÁRIO","Quente"), prod("km-q11","Romeu","10 un.","DIÁRIO","Quente"), prod("km-q12","Churros Doce de Leite","8 un.","DIÁRIO","Quente"),
- other("km-l1","Bancada limpa e higienizada","Conferido","DIÁRIO","Limpeza"), other("km-l2","Chão lavado","Conferido","DIÁRIO","Limpeza"), other("km-l3","Lixo retirado - sem caixa no chão","Conferido","DIÁRIO","Limpeza"), other("km-l4","Vitrine limpa","Conferido","DIÁRIO","Limpeza"), other("km-l5","Utensílios lavados e organizados","Conferido","DIÁRIO","Limpeza"),
- other("km-o1","Vitrine organizada - fria em cima, quente embaixo","Conferido","DIÁRIO","Organização"), other("km-o2","Itens no lugar da foto de referência","Conferido","DIÁRIO","Organização"), other("km-o3","Estoque do quiosque organizado por setor","Conferido","DIÁRIO","Organização"), other("km-o4","Abertura do quiosque conferida (9h)","Conferido","DIÁRIO","Organização"),
-];
-const kioskNoite:Item[]=[
- prod("kn-f1","Salmão Poró","10 un.","DIÁRIO","Reposição fria"), prod("kn-f2","Makimagu","10 un.","DIÁRIO","Reposição fria"), prod("kn-f3","Spice Roll","10 un.","DIÁRIO","Reposição fria"), prod("kn-f4","Kani Cheese","8 un.","DIÁRIO","Reposição fria"), prod("kn-f5","Dual Fish","8 un.","DIÁRIO","Reposição fria"), prod("kn-f6","Ebi Crush","8 un.","DIÁRIO","Reposição fria"), prod("kn-f7","Jatopeia","8 un.","DIÁRIO","Reposição fria"), prod("kn-f8","Maki Fish","8 un.","DIÁRIO","Reposição fria"), prod("kn-f9","Uramaki Philadelphia","8 un.","DIÁRIO","Reposição fria"), prod("kn-f10","Philadelphia","8 un.","DIÁRIO","Reposição fria"),
- prod("kn-q1","Hot Haddock","10 un.","DIÁRIO","Reposição quente"), prod("kn-q2","Hot Couve","8 un.","DIÁRIO","Reposição quente"), prod("kn-q3","Saumatro","8 un.","DIÁRIO","Reposição quente"), prod("kn-q4","Hot Salmão Crush","10 un.","DIÁRIO","Reposição quente"), prod("kn-q5","Hot Atum Crush","10 un.","DIÁRIO","Reposição quente"), prod("kn-q6","Hot Camarão Crush","10 un.","DIÁRIO","Reposição quente"), prod("kn-q7","Hot Maguru","8 un.","DIÁRIO","Reposição quente"), prod("kn-q8","Kani Crocante","8 un.","DIÁRIO","Reposição quente"), prod("kn-q9","Nipo","8 un.","DIÁRIO","Reposição quente"), prod("kn-q10","Hot Philadelphia","8 un.","DIÁRIO","Reposição quente"), prod("kn-q11","Romeu","8 un.","DIÁRIO","Reposição quente"), prod("kn-q12","Churros Doce de Leite","6 un.","DIÁRIO","Reposição quente"),
- other("kn-l1","Bancada limpa e higienizada","Conferido","DIÁRIO","Limpeza"), other("kn-l2","Chão lavado","Conferido","DIÁRIO","Limpeza"), other("kn-l3","Lixo retirado - sem caixa no chão","Conferido","DIÁRIO","Limpeza"), other("kn-l4","Vitrine limpa","Conferido","DIÁRIO","Limpeza"), other("kn-l5","Fritadeira limpa e desligada","Conferido","DIÁRIO","Limpeza"), other("kn-l6","Utensílios lavados e organizados","Conferido","DIÁRIO","Limpeza"),
  other("kn-o1","Vitrine organizada","Conferido","DIÁRIO","Organização"), other("kn-o2","Itens no lugar da foto de referência","Conferido","DIÁRIO","Organização"), other("kn-o3","Estoque conferido","Conferido","DIÁRIO","Organização"), other("kn-o4","Fechamento do quiosque conferido (22h, 23h sex/sáb)","Conferido","DIÁRIO","Organização"), other("kn-o5","Tudo desligado e trancado","Conferido","DIÁRIO","Organização"),
 ];
 // Visão da Gerência: união dos dois turnos do quiosque. Quem é do quiosque vê só o seu turno.
@@ -357,7 +343,6 @@ export default function App(){
   const [date,setDate]=useState(today());
   const [perfil,setPerfil]=useState("Normal");
   const [turno,setTurno]=useState("Manhã");
-  const [section,setSection]=useState<Section>("Produção");
   const [period,setPeriod]=useState<"DIÁRIO"|"SEMANAL"|"MENSAL">("DIÁRIO");
   const [entries,setEntries]=useState<Record<string,{id:string,value:Entry}>>({});
   const [chat,setChat]=useState<{id:string,value:ChatMsg}[]>([]);
@@ -444,13 +429,13 @@ export default function App(){
   const [showPassword,setShowPassword]=useState(false);
   const [rememberMe,setRememberMe]=useState(false);
   const [loginError,setLoginError]=useState("");
-  const [loginBusy,setLoginBusy]=useState(false);
   const [attempts,setAttempts]=useState<Record<string,number>>({});
   const [lockedUntil,setLockedUntil]=useState<Record<string,number>>({});
   const [nowTick,setNowTick]=useState(Date.now());
   const [theme,setTheme]=useState<"light"|"dark">(()=>{ try{ const stored=localStorage.getItem("dojo-theme"); if(stored==="dark"||stored==="light") return stored; return "dark"; }catch{ return "dark"; } });
   const [pushOn,setPushOn]=useState(false);
   const [pushBusy,setPushBusy]=useState(false);
+  const [pushInfo,setPushInfo]=useState("");
   useEffect(()=>{ try{ document.documentElement.dataset.theme=theme; localStorage.setItem("dojo-theme",theme); }catch{} },[theme]);
   const [toast,setToast]=useState<{text:string;undo?:()=>void}|null>(null);
   const [photoViewer,setPhotoViewer]=useState<{src:string;label:string;onDelete?:()=>void}|null>(null);
@@ -485,8 +470,13 @@ export default function App(){
       const myGroups = groups.filter(g=>g.members.includes(authUser)).map(g=>g.key);
       await enablePush(authUser, myGroups);
       setPushOn(true);
+      setPushInfo("");
       setMsg("Notificações ativadas neste aparelho.");
-    }catch(err){ setMsg(err instanceof Error ? err.message : "Não foi possível ativar as notificações."); }
+    }catch(err){
+      const text = err instanceof Error ? err.message : "Não foi possível ativar as notificações.";
+      setPushInfo(text);
+      setMsg(text);
+    }
     setPushBusy(false);
   }
   // Gerência = somente conferência. Ninguém edita o checklist de outra pessoa.
@@ -496,6 +486,20 @@ export default function App(){
     if(!isManager && selected!==authUser) setSelected(authUser);
     if(isManager && (!selected || selected==="Gerência")) setSelected(staffProfiles[0]||"");
   },[authUser,isManager,selected]);
+  useEffect(()=>{
+    if(!authUser) return;
+    let cancelled = false;
+    getPushStatus().then(s=>{
+      if(cancelled) return;
+      setPushOn(s.subscribed);
+      if(!s.supported) setPushInfo("Este navegador não suporta notificações push.");
+      else if(s.permission==="denied") setPushInfo("Permissão negada. Libere notificações nas configurações do site/app e toque no sino.");
+      else if(s.isIOS && !s.standalone) setPushInfo("No iPhone: Compartilhar → Adicionar à Tela Inicial, abra o app instalado e toque no sino.");
+      else if(!s.subscribed) setPushInfo("Toque no sino para receber alertas de mensagens.");
+      else setPushInfo("");
+    }).catch(()=>{});
+    return ()=>{ cancelled = true; };
+  },[authUser]);
   useEffect(()=>{
     if(authUser && !isManager && tab==="overview") setTab("checklist");
     if(authUser && isManager && tab==="checklist") setTab("overview");
@@ -708,7 +712,6 @@ export default function App(){
   }
 
   function handleLoginSubmit(){
-    if(loginBusy) return;
     const loginKey = normalizeLogin(loginInput);
     if(!loginKey){ setLoginError("Digite seu login."); return; }
     const until = lockedUntil[loginKey]||0;
@@ -744,14 +747,11 @@ export default function App(){
   const submissionForSection = (sec:Section) => {
     return Object.values(submissions).filter(s=>s.value.profile===selected && s.value.date===date && s.value.section===sec && (sec!=="Produção" || s.value.period===period)).sort((a,b)=>b.id.localeCompare(a.id))[0] || null;
   };
-  const isLockedForSection = (sec:Section) => { const s=submissionForSection(sec); return !!s && (s.value.status==="Aguardando" || s.value.status==="Aprovado"); };
   const countsForSection = (sec:Section) => {
     const list = itemsForSection(sec);
     const done = list.filter(i=>entries[`${selected}|${date}|${i.id}`]?.value.status==="Feito").length;
     return { list, done, total:list.length, pending:list.filter(i=>{ const s=entries[`${selected}|${date}|${i.id}`]?.value.status||""; return s===""; }).length };
   };
-  const totalDoneAll = activeSections.reduce((acc,sec)=>acc+countsForSection(sec).done,0);
-  const totalAll = activeSections.reduce((acc,sec)=>acc+countsForSection(sec).total,0);
 
   function goToChatForCurrent(){
     const targetConvo = isManager ? (selected && selected!=="Gerência" ? selected : (staffProfiles[0]||"")) : "Gerência";
@@ -1618,7 +1618,7 @@ export default function App(){
           <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none"><input type="checkbox" checked={rememberMe} onChange={e=>setRememberMe(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0"/><span className="text-[14px] font-semibold">Lembrar de mim</span></label>
           {loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">Muitas tentativas. Aguarde {loginLockLeft}s</p>}
           {loginError && !loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">{loginError}</p>}
-          <button type="submit" disabled={loginBusy || loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">{loginBusy ? "Entrando…" : "Entrar"}</button>
+          <button type="submit" disabled={loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar</button>
           <p className="mt-3 text-center text-[12px] leading-relaxed text-[var(--muted)]">Acesso individual.</p>
           <button type="button" onClick={()=>setQrOpen(true)} className="mt-4 w-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={18}/> QR do Dojo</button>
         </form>
@@ -1645,6 +1645,7 @@ export default function App(){
       </div>
     </header>}
 
+    {authUser && pushInfo && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] font-bold text-[var(--muted)]">🔔 {pushInfo}</p></div>}
     {offlineMode && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] text-[var(--muted)]">Modo offline - histórico local</p></div>}
     {loading && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4 space-y-3" aria-label="Carregando dados"><div className="skeleton h-24" /><div className="grid grid-cols-2 gap-3"><div className="skeleton h-20" /><div className="skeleton h-20" /></div><div className="skeleton h-32" /></div>}
 
@@ -1829,7 +1830,7 @@ export default function App(){
           {isPistaSection && guideOpen[sec] && <div className="mt-3 card p-5 border border-[var(--warning)]"><p className="font-extrabold text-[16px]">Mapa da pista — guia visual</p><p className="text-[12px] text-[var(--muted)] mt-1">Confira a posição de cada item antes de concluir.</p><ul className="mt-4 space-y-3">{PISTA_GUIDE.map(g=><li key={g.label} className="leading-relaxed"><span className="block text-[13px] font-extrabold tracking-wide text-[var(--warning-text)]">{g.label}</span><span className="block text-[17px] font-bold leading-snug mt-1 [overflow-wrap:anywhere]">{g.items}</span></li>)}</ul></div>}
 
           {!collapsedSections[sec] && <div className="mt-3 space-y-4">
-            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const cardBg = e.status==="Feito" ? "var(--success-bg)" : e.status==="Não feito" ? "var(--danger-bg)" : undefined; return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${flashId===item.id?"item-pop":""} ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
+            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${flashId===item.id?"item-pop":""} ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
               <div className="flex gap-3 items-start">
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
