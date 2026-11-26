@@ -1755,12 +1755,16 @@ export default function App(){
       return q.includes(n) || n.split(" ").some(w=>w.length>=4 && q.includes(w));
     });
     if(!match){ setMsg(`Não encontrei o item falado: ${text}`); return; }
+    const deps = pendingDeps(match.id);
+    if(deps.length){ setMsg(`Antes de ${match.name}: ${deps.map(d=>d.name).join(", ")}.`); return; }
     const num = text.match(/\b(\d{1,4})\b/)?.[1];
-    await setStatus(match,"Feito");
-    if(num){
-      const cur=entryFor(match.id);
-      await saveEntry({...cur,profile:selected||"",date,itemId:match.id,status:"Feito",feito:num},{message:`${match.name}: ${num} un.`});
-    }
+    const cur = entryFor(match.id);
+    if(cur.status===""){ void ensureShiftStarted(); }
+    await saveEntry(
+      {...cur,profile:selected||"",date,itemId:match.id,status:"Feito",feito:num||cur.feito||"",justificativa:""},
+      {silent:true},
+    );
+    if(cur.status==="Não feito"){ void resolveActionPlanForItem(match.id); }
     setQuickEntryOpen(false); setQuickEntryText("");
     setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
   }
