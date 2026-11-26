@@ -1757,7 +1757,10 @@ export default function App(){
     if(!match){ setMsg(`Não encontrei o item falado: ${text}`); return; }
     const num = text.match(/\b(\d{1,4})\b/)?.[1];
     await setStatus(match,"Feito");
-    if(num) await saveFeito(match,num);
+    if(num){
+      const cur=entryFor(match.id);
+      await saveEntry({...cur,profile:selected||"",date,itemId:match.id,status:"Feito",feito:num},{message:`${match.name}: ${num} un.`});
+    }
     setQuickEntryOpen(false); setQuickEntryText("");
     setMsg(`${match.name} marcado como Feito${num?` · ${num} un.`:""}.`);
   }
