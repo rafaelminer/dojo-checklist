@@ -74,7 +74,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Sugestão por histórico:** calcula a quantidade média dos últimos dias da semana iguais e oferece “Usar” no card do item.
 - **Produção compartilhada:** mostra, para cada colega que faz os mesmos itens, o progresso de hoje de ambos e o que falta a cada um.
 - **Dependência entre itens:** itens como Salmão Maki, Nigiri finalizado e Nigiri de camarão só podem ser marcados como Feito depois de suas etapas anteriores.
-- **Comando de voz:** botão “Falar item” no checklist; reconhece o nome do produto e a quantidade falada (pt-BR) e já marca como Feito.
+- **Comando de voz:** botão “Falar ou anotar item” no checklist; abre um painel com reconhecimento em pt-BR e um campo de texto alternativo que funciona em qualquer navegador (ex.: “Ebi Hot 12”). Marca como Feito e salva a quantidade em um único registro.
 - **Ficha do produto:** toque no nome do item para ver foto de referência, padrão, instrução, sugestão, que foi feito ontem e colegas que fazem o mesmo item.
 - **QR por estação:** gerência gera um QR por pessoa/posto; ao escanear, o app abre com o login preenchido.
 
