@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
-import { api } from "./api";
+import { api, flushQueue, queueSize } from "./api";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 
 type Freq = "DIÁRIO" | "SEMANAL" | "MENSAL";
@@ -450,6 +450,7 @@ export default function App(){
   const [msg,setMsg]=useState("");
   const [offlineMode,setOfflineMode]=useState(false);
   const [connectionError,setConnectionError]=useState("");
+  const [queuedCount,setQueuedCount]=useState(0);
   const [loading,setLoading]=useState(true);
   const [saving,setSaving]=useState(false);
   const [tab,setTab]=useState<Tab>("checklist");
@@ -1459,8 +1460,16 @@ export default function App(){
 
   useEffect(()=>{
     if(!authUser) return;
-    const t = setInterval(()=>{ reloadRecords().then(()=>setOfflineMode(false)).catch(()=>setOfflineMode(true)); },20000);
-    return ()=>clearInterval(t);
+    const sync = async () => {
+      await flushQueue();
+      setQueuedCount(queueSize());
+      reloadRecords().then(()=>setOfflineMode(false)).catch(()=>setOfflineMode(true));
+    };
+    void sync();
+    const t = setInterval(()=>void sync(),20000);
+    const onOnline = () => void sync();
+    window.addEventListener("online",onOnline);
+    return ()=>{ clearInterval(t); window.removeEventListener("online",onOnline); };
   },[authUser]);
 
   async function completeSectionFor(sec:Section){
@@ -1912,7 +1921,7 @@ export default function App(){
     </header>}
 
     {authUser && pushInfo && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] font-bold text-[var(--muted)]">🔔 {pushInfo}</p></div>}
-    {offlineMode && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] text-[var(--muted)]">Modo offline - histórico local</p></div>}
+    {(offlineMode || queuedCount>0) && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] font-bold text-[var(--muted)]">Modo offline · {queuedCount>0 ? `${queuedCount} alteraç${queuedCount===1?"ão":"ões"} aguardando sincronização` : "histórico local"}</p></div>}
     {loading && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4 space-y-3" aria-label="Carregando dados"><div className="skeleton h-24" /><div className="grid grid-cols-2 gap-3"><div className="skeleton h-20" /><div className="skeleton h-20" /></div><div className="skeleton h-32" /></div>}
 
     {tab==="overview" && isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[140px] tab-transition">
