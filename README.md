@@ -84,6 +84,9 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **PDF:** botão “PDF” gera o relatório em A4 (biblioteca carregada sob demanda).
 - **Navegação do dashboard:** atalhos Conferência / Equipe / Qualidade rolam até a área correspondente.
 - **Senhas com hash:** funcionários cadastrados agora têm Senha SHA-256; cadastros antigos em texto puro continuam funcionando por compatibilidade.
+- **Limpeza:** busca ⌘K sem botão visível e banner inalcançável da gerência removidos; Módulos mostra só coleções úteis.
+- **ErrorBoundary:** erro de renderização mostra tela de recarga em vez de página em branco.
+- **Push:** inscrições inválidas (404/410/400) são removidas automaticamente.
 
 ## Notificações push
 
