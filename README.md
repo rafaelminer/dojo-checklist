@@ -71,6 +71,9 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Instruções padrão dos itens:** gerência edita em Módulos → “Instruções padrão dos itens”; o texto aparece no card do item.
 - **Próximas pendências:** no topo do dashboard da gerência.
 - **Alerta de item crítico:** itens de Limpeza/Organização/temperatura marcados como “Não feito” avisam gerência e grupo automaticamente.
+- **Sugestão por histórico:** calcula a quantidade média dos últimos dias da semana iguais e oferece “Usar” no card do item.
+- **Produção compartilhada:** mostra, para cada colega que faz os mesmos itens, o progresso de hoje de ambos e o que falta a cada um.
+- **Dependência entre itens:** itens como Salmão Maki, Nigiri finalizado e Nigiri de camarão só podem ser marcados como Feito depois de suas etapas anteriores.
 
 ## Notificações push
 
