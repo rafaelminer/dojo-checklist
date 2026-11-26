@@ -1701,11 +1701,11 @@ export default function App(){
   },[selected,date,entries,activeSections]);
   const sharedProduction = useMemo(()=>{
     if(!selected) return [] as {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}[];
-    const mine = new Set((byProfile[selected]||[]).map(i=>i.id));
+    const mine = new Set((byProfile[selected]||[]).filter(i=>String(i.section||"").includes("Produção")).map(i=>i.id));
     return Object.keys(byProfile)
       .filter(p=>p!==selected && p!=="Gerência")
       .map(p=>{
-        const shared=(byProfile[p]||[]).filter(i=>mine.has(i.id));
+        const shared=(byProfile[p]||[]).filter(i=>mine.has(i.id) && String(i.section||"").includes("Produção"));
         if(!shared.length) return null;
         const doneMe=shared.filter(i=>entryFor(i.id).status==="Feito").length;
         const doneThem=shared.filter(i=>entries[`${p}|${date}|${i.id}`]?.value.status==="Feito").length;
@@ -1720,7 +1720,7 @@ export default function App(){
       <h3 className="font-extrabold text-[18px]">Produção compartilhada</h3>
       <p className="text-[13px] text-[var(--muted)] mt-1">Quem faz os mesmos itens que {selected} — progresso de hoje.</p>
       <ul className="mt-3 space-y-3">{sharedProduction.map(s=><li key={s.person} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0">
-        <p className="font-bold text-[15px]">{s.person} <span className="text-[12px] font-normal text-[var(--muted)]">· {s.total} itens em comum</span></p>
+        <p className="font-bold text-[15px]">{s.person} <span className="text-[12px] font-normal text-[var(--muted)]">· {s.total} produções em comum</span></p>
         <p className="text-[13px] text-[var(--muted)] mt-1">Você {s.doneMe}/{s.total} · {s.person} {s.doneThem}/{s.total}</p>
         {s.missing.length>0 && <p className="text-[13px] font-bold text-[var(--warning-text)] mt-1">Falta a {s.person}: {s.missing.slice(0,4).join(" · ")}{s.missing.length>4?"…":""}</p>}
       </li>)}</ul>
