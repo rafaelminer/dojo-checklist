@@ -264,7 +264,7 @@ a { color: var(--primary); }
   background-attachment: fixed;
 }
 @media (max-width: 639px) {
-  :root { --header-h: 112px; }
+  :root { --header-h: 64px; }
 }
 .app-header {
   background: color-mix(in srgb, var(--bg) 78%, transparent);

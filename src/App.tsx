@@ -1635,13 +1635,12 @@ export default function App(){
   return <div data-safe-area-inset-root className="app-shell overflow-x-clip" style={{boxSizing:"border-box",paddingTop:"var(--safe-area-inset-top)",minHeight:"100dvh"}}>
     {!authUser ? loginContent : <>
     {!isChatDetail && <header data-safe-area-sticky-top style={{top:"var(--safe-area-inset-top)"}} className="app-header sticky z-30 border-b border-[var(--line)]">
-      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2.5 sm:py-3 flex flex-wrap items-center gap-x-2 gap-y-2 sm:gap-x-3">
-        <span className="w-10 h-10 rounded-full grid place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
-        <div className="min-w-0 flex-1 basis-[calc(100%-3.5rem)] sm:basis-auto leading-tight">
-          <div className="font-extrabold tracking-tight text-[16px] sm:text-[19px] truncate">Olá, {authUser}</div>
-          <div className="text-[11px] sm:text-[13px] text-[var(--muted)] mt-0.5 truncate">{fmtDate(date)} · {perfil} · {turno}{isManager && selected && selected!==authUser ? ` · Conferindo: ${selected}` : ""}</div>
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
+        <span className="hidden sm:grid w-10 h-10 rounded-full place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="font-extrabold tracking-tight text-[15px] sm:text-[19px] truncate">Olá, {authUser}{isManager && selected && selected!==authUser ? ` · ${selected}` : ""}</div>
         </div>
-        <div className="ml-auto flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
           <button type="button" disabled={pushBusy} onClick={()=>void handleEnablePush()} title="Ativar notificações de mensagens" aria-label={pushOn?"Notificações ativas":"Ativar notificações"} className={`w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full border pressable ${pushOn?"bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]":"bg-[var(--surface-2)] border-[var(--line)] text-[var(--ink)]"}`}><Bell size={18}/></button>
           {themeButton}
