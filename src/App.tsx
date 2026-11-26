@@ -1459,17 +1459,17 @@ export default function App(){
   }
 
   useEffect(()=>{
-    if(!authUser) return;
-    const sync = async () => {
-      await flushQueue();
-      setQueuedCount(queueSize());
-      reloadRecords().then(()=>setOfflineMode(false)).catch(()=>setOfflineMode(true));
-    };
+    const sync = async () => { await flushQueue(); setQueuedCount(queueSize()); };
     void sync();
     const t = setInterval(()=>void sync(),20000);
     const onOnline = () => void sync();
     window.addEventListener("online",onOnline);
     return ()=>{ clearInterval(t); window.removeEventListener("online",onOnline); };
+  },[]);
+  useEffect(()=>{
+    if(!authUser) return;
+    const t = setInterval(()=>{ reloadRecords().then(()=>setOfflineMode(false)).catch(()=>setOfflineMode(true)); },20000);
+    return ()=>clearInterval(t);
   },[authUser]);
 
   async function completeSectionFor(sec:Section){
