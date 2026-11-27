@@ -1,12 +1,15 @@
 // @ts-nocheck - tela extraída com props dinâmicas do App
+import { useState } from "react";
 import { CalendarDays, Camera, Check, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck, Download, Eye, EyeOff, Images, LayoutDashboard, Lock, LogOut, MessageCircle, Mic, Moon, QrCode, Send, Share2, Sparkles, Sun, ThumbsDown, ThumbsUp, Trash2, Users, X } from "lucide-react";
 
 export default function ChecklistScreen(props: any) {
   const p = props.p;
+  const [openSections,setOpenSections]=useState<Record<string,boolean>>({});
   const { CalendarDays, Check, ChevronLeft, MAINT_ITEMS, MODULES_META, Mic, PISTA_GUIDE, PhotoField, QUICK_REASONS, Stepper, Trash2, WEEKLY_ITEMS, X, activeSections, addDays, anyTempOut, applyQuickReason, authUser, auxForm, checklists, completeWeekly, countsForSection, date, dayLabel, daysBetween, deleteModuleRecord, deleteRecordPhoto, displaySectionTitle, draftLabel, entries, entryFor, expiryDateInput, expiryProduct, expirySaving, fmtDate, freezerLim, freezerOut, freqStyle, friaLim, friaOut, goToChatForCurrent, guideOpen, handleJustificationChange, handleMaintNoteChange, handleTempChange, haptic, instructions, isKioskSelected, isManager, itemRules, items, justDraft, justOpen, justSaved, justSaving, latestHandover, maintEntryFor, maintNoteDraft, maintOpen, missingCollections, moduleConfirmDelete, moduleEditingId, moduleErrors, moduleForm, moduleMetaFor, moduleMsg, moduleRowsFor, moduleSaving, moduleTab,  myExpiries, occurrenceOpen, occurrenceSending, occurrenceText, onlyMissing, openSignature, pendingDeps, perfil, period, qualityAnswers, qualityDraft, questions, readOnly, receivings, registerExpiry, resetModuleForm, saveFeito, saveModuleRecord, savePhoto, saveQualityAnswer, saveReceiving, saveStockCount, saving, selected, sendOccurrence, setAuxForm, setCameraQuestion, setDate, setExpiryDateInput, setExpiryProduct, setGuideOpen, setMaintOpen, setMaintStatus, setModuleConfirmDelete, setModuleForm, setModuleMsg, setModuleTab, setOccurrenceOpen, setOccurrenceText, setOnlyMissing, setPerfil, setPeriod, setPhotoViewer, setProductItem, setQualityDraft, setQuickEntryOpen, setStatus, setTaskStatus, setTempOpen, setToast, setTrainingStatus, setTurno, setValidityOpen, setWeeklyOpen, setWeeklyStatus, sharedProductionSection, shifts, signatures, startModuleEdit, statusLabel, stockCounts, stockItems, submissionForSection, suggestedFor, t, tab, taskApplies, taskOverdue, tasks, tempFreezer, tempFria, tempOpen, tempSaving, toNonNegativeInt, today, trainings, turno, validityOpen, weeklyDoneCount, weeklyEntryFor, weeklyMarkedCount, weeklyOpen, weeklySaving, weeklySubForWeek } = p;
   return <>
     {tab==="checklist" && !isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[220px] tab-transition">
       {draftLabel && <div className="mt-5 p-3 rounded-2xl bg-[var(--success-bg)] border border-[var(--success-border)] text-sm font-semibold flex gap-2 items-center" role="status"><Check size={17} className="shrink-0 text-[var(--green)]"/>{draftLabel}<span className="text-[var(--muted)] font-normal">{t("· Salvo automaticamente. Fecha e volta que está tudo aqui.")}</span></div>}
+      <div className="flex gap-2 mt-4"><button type="button" onClick={()=>setOpenSections(Object.fromEntries(activeSections.map(s=>[s,true])))} className="chip">Abrir todas as seções</button><button type="button" onClick={()=>setOpenSections(Object.fromEntries(activeSections.map(s=>[s,false])))} className="chip">Fechar todas</button></div>
       <section className="mt-5 card p-5" aria-label={t("Minhas tarefas")}>
         <h3 className="font-extrabold text-[18px]">{t("Minhas tarefas")}</h3>
         {tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta" && taskApplies(t.value)).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">{t("Nenhuma tarefa pendente.")}</p> : <ul className="mt-3 space-y-2">{tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta" && taskApplies(t.value)).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span><button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">{t("Concluir")}</button></li>)}</ul>}
@@ -74,6 +77,7 @@ export default function ChecklistScreen(props: any) {
       {isKioskSelected && <div className="mt-5 card p-4"><p className="font-extrabold text-[16px]">{turno==="Noite" ? "Fechamento — Reposição + Fechamento da Pista" : "Abertura — Produção + Montagem da Pista"}</p><p className="text-[12px] text-[var(--muted)] mt-1">{turno==="Noite" ? "Turno da noite · quiosque" : "Turno da manhã · quiosque"}</p></div>}
       {activeSections.map((sec)=>{
         const counts = countsForSection(sec);
+        const open = openSections[sec] ?? sec === activeSections[0];
         const sub = submissionForSection(sec);
         const locked = !!sub && (sub.value.status==="Aguardando" || sub.value.status==="Aprovado");
         const concluded = !!sub && (sub.value.status==="Aguardando" || sub.value.status==="Aprovado");
@@ -88,6 +92,7 @@ export default function ChecklistScreen(props: any) {
                 {isPistaSection ? <button type="button" onClick={()=>setGuideOpen(prev=>({...prev,[sec]:!prev[sec]}))} aria-expanded={!!guideOpen[sec]} className="text-left"><h2 className="font-extrabold text-[20px] leading-tight">{displaySectionTitle(sec)} — {counts.done}/{counts.total} feitos <span className="text-[13px] font-extrabold text-[var(--warning-text)] whitespace-nowrap">{guideOpen[sec] ? "Ocultar mapa ▲" : "Ver mapa da pista ▸"}</span></h2></button> : <h2 className="font-extrabold text-[20px] leading-tight">{displaySectionTitle(sec)} — {counts.done}/{counts.total} feitos</h2>}
                 {concluded && <span className="mt-1 inline-flex items-center gap-1 text-[12px] font-extrabold text-[var(--success-text)]"><span className="check-pop inline-grid place-items-center w-4 h-4 rounded-full bg-[var(--green)] text-white"><Check size={11} strokeWidth={3}/></span> {sec} concluída</span>}
               </div>
+              <button type="button" onClick={()=>setOpenSections(prev=>({...prev,[sec]:!open}))} aria-expanded={open} aria-label={`${open?"Recolher":"Expandir"} ${sec}`} className="shrink-0 w-9 h-9 grid place-items-center rounded-full bg-[var(--surface-2)] border border-[var(--line)] text-[var(--muted)] pressable">{open?"▾":"▸"}</button>
             </div>
             {sec==="Produção" && !isKioskSelected && <div className="mt-3 segmented" role="group" aria-label="Periodicidade">{(["DIÁRIO","SEMANAL","MENSAL"] as const).map(p=><button key={p} type="button" aria-pressed={period===p} onClick={()=>setPeriod(p)}>{p}</button>)}</div>}
             <div className="mt-3 h-1.5 rounded-full bg-[var(--surface-3)] overflow-hidden" role="progressbar" aria-label={`Progresso de ${sec}`} aria-valuenow={counts.total ? Math.round(counts.done/counts.total*100) : 0} aria-valuemin={0} aria-valuemax={100}><div className="h-full rounded-full bg-[var(--primary)] transition-all duration-300" style={{width:`${counts.total ? Math.round(counts.done/counts.total*100) : 0}%`}} /></div>
@@ -95,7 +100,7 @@ export default function ChecklistScreen(props: any) {
           </div>
           {isPistaSection && guideOpen[sec] && <div className="mt-3 card p-5 border border-[var(--warning)]"><p className="font-extrabold text-[16px]">{t("Mapa da pista — guia visual")}</p><p className="text-[12px] text-[var(--muted)] mt-1">{t("Confira a posição de cada item antes de concluir.")}</p><ul className="mt-4 space-y-3">{PISTA_GUIDE.map(g=><li key={g.label} className="leading-relaxed"><span className="block text-[13px] font-extrabold tracking-wide text-[var(--warning-text)]">{g.label}</span><span className="block text-[17px] font-bold leading-snug mt-1 [overflow-wrap:anywhere]">{g.items}</span></li>)}</ul></div>}
 
-          <div className="mt-3 space-y-4">
+          {open && <div className="mt-3 space-y-4">
             {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); const needsPhoto = !!itemRules.find(r=>r.value.itemId===item.id)?.value.requirePhoto && !e.photo; return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
               <div className="flex gap-3 items-start">
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
@@ -117,7 +122,7 @@ export default function ChecklistScreen(props: any) {
               </div>}
             </article>; })}
             {displayList.length===0 && <div className="card p-6 text-center">{onlyMissing ? "Nada faltando aqui." : "Nenhum item encontrado."}</div>}
-          </div>
+          </div>}
 
           {/* Concluir fixo embaixo */}
         </section>;
