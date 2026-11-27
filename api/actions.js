@@ -2,7 +2,6 @@
 
 const SUPABASE_URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const SERVICE_KEY = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-const SHARED_KEY = String(process.env.DOJO_API_SECRET || "");
 const PUB_KEY = String(process.env.SUPABASE_ANON_KEY || "");
 
 const headers = () => ({
@@ -14,7 +13,7 @@ const headers = () => ({
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-dojo-key");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   if (req.method === "OPTIONS") {
     res.status(204).end();
@@ -25,17 +24,16 @@ export default async function handler(req, res) {
     return;
   }
   const bearer = String(req.headers.authorization || "");
-  if (bearer.startsWith("Bearer ")) {
-    const token = bearer.slice(7);
-    const check = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-      headers: { apikey: PUB_KEY, Authorization: `Bearer ${token}` },
-    });
-    if (!check.ok) {
-      res.status(401).json({ error: "invalid token" });
-      return;
-    }
-  } else if (!SHARED_KEY || req.headers["x-dojo-key"] !== SHARED_KEY) {
-    res.status(401).json({ error: "unauthorized" });
+  if (!bearer.startsWith("Bearer ")) {
+    res.status(401).json({ error: "token required" });
+    return;
+  }
+  const token = bearer.slice(7);
+  const check = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+    headers: { apikey: PUB_KEY, Authorization: `Bearer ${token}` },
+  });
+  if (!check.ok) {
+    res.status(401).json({ error: "invalid token" });
     return;
   }
   if (!SUPABASE_URL || !SERVICE_KEY) {

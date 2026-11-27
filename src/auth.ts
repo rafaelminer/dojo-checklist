@@ -1,11 +1,11 @@
 // Login via Supabase Auth. O JWT fica apenas na sessão do navegador.
 
-async function callAuth(body: Record<string, unknown>, sharedKey = "") {
+async function callAuth(body: Record<string, unknown>, token = "") {
   const res = await fetch("/api/auth", {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      ...(sharedKey ? { "x-dojo-key": sharedKey } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -20,7 +20,7 @@ export async function supabaseSignIn(login: string, password: string) {
   return String(json.access_token || "");
 }
 
-export async function supabaseCreateUser(login: string, password: string, sharedKey: string) {
+export async function supabaseCreateUser(login: string, password: string, token: string) {
   const email = `${login}@dojo.local`;
-  return callAuth({ action: "create-user", email, password }, sharedKey);
+  return callAuth({ action: "create-user", email, password }, token);
 }

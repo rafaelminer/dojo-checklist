@@ -3,11 +3,11 @@
 const URL = String(process.env.SUPABASE_URL || "").replace(/\/$/, "");
 const PUB = String(process.env.SUPABASE_ANON_KEY || "");
 const SERVICE = String(process.env.SUPABASE_SERVICE_ROLE_KEY || "");
-const SHARED = String(process.env.DOJO_API_SECRET || "");
+
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-dojo-key");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   if (req.method === "OPTIONS") { res.status(204).end(); return; }
   if (req.method !== "POST") { res.status(405).json({ error: "method not allowed" }); return; }
@@ -30,7 +30,14 @@ export default async function handler(req, res) {
     }
 
     if (action === "create-user") {
-      if (!SHARED || req.headers["x-dojo-key"] !== SHARED) { res.status(401).json({ error: "unauthorized" }); return; }
+      const bearer = String(req.headers.authorization || "");
+      if (!bearer.startsWith("Bearer ")) { res.status(401).json({ error: "token required" }); return; }
+      const check = await fetch(`${URL}/auth/v1/user`, {
+        headers: { apikey: PUB, Authorization: bearer },
+      });
+      if (!check.ok) { res.status(401).json({ error: "invalid token" }); return; }
+      const who = await check.json();
+      if (who?.user?.email !== "gerencia@dojo.local") { res.status(403).json({ error: "only manager" }); return; }
       if (!SERVICE || !email || !password) { res.status(400).json({ error: "missing data" }); return; }
       const r = await fetch(`${URL}/auth/v1/admin/users`, {
         method: "POST",

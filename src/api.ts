@@ -49,7 +49,6 @@ async function send(action: string, args: any) {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-dojo-key": String(import.meta.env.VITE_DOJO_API_SECRET || ""),
         ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
       },
       body: JSON.stringify({ action, args }),

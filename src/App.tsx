@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
-import { api, flushQueue, queueSize, setAuthToken } from "./api";
+import { api, flushQueue, getAuthToken, queueSize, setAuthToken } from "./api";
 import { supabaseCreateUser, supabaseSignIn } from "./auth";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 import QrModal from "./components/QrModal";
@@ -1645,7 +1645,7 @@ export default function App(){
     try{
       if(editingRec) await api("records.replace",{collection:"dojo_credentials",id:editing!,value});
       else await api("records.create",{collection:"dojo_credentials",value,idempotency_key:`dojo-staff-${login}-${Date.now()}`});
-      try{ await supabaseCreateUser(login,password,String(import.meta.env.VITE_DOJO_API_SECRET||"")); }catch{}
+      try{ await supabaseCreateUser(login,password,getAuthToken()); }catch{}
       await reloadRecords(); setOfflineMode(false);
       resetStaffForm();
       setStaffMsg(`${name} salvo. Login: ${login} · senha: ${password}.`);
