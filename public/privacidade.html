@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacidade — Dojo Checklist</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin:0; background:#0B0F0E; color:#fff; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; line-height:1.6; }
+      main { max-width:760px; margin:0 auto; padding:32px 20px 64px; }
+      p.kicker { color:#9AA5A1; text-transform:uppercase; letter-spacing:.14em; font-size:12px; font-weight:800; }
+      h1 { font-size:30px; margin:8px 0 24px; }
+      h2 { font-size:19px; margin:28px 0 8px; color:#FF6B1A; }
+      p, li { color:#D7DEDB; font-size:15px; }
+      ul { padding-left:20px; }
+      table { width:100%; border-collapse:collapse; margin-top:12px; font-size:14px; }
+      th, td { border-bottom:1px solid #262E2B; padding:10px 8px; text-align:left; vertical-align:top; }
+      th { color:#9AA5A1; font-size:12px; text-transform:uppercase; }
+      a { color:#FF6B1A; }
+      footer { margin-top:40px; color:#9AA5A1; font-size:12px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="kicker">Dojo Checklist</p>
+      <h1>Política de Privacidade</h1>
+      <p>Este documento explica quais dados o Dojo Checklist coleta, por quê e como eles são protegidos.</p>
+
+      <h2>1. Dados coletados</h2>
+      <table>
+        <tr><th>Categoria</th><th>Exemplos</th><th>Finalidade</th></tr>
+        <tr><td>Identificação</td><td>nome, login, senha em hash, unidade, setor, turno</td><td>autenticar e separar o que é de cada pessoa</td></tr>
+        <tr><td>Execução</td><td>status, quantidades, justificativas, horários</td><td>registrar a operação e conferir a produção</td></tr>
+        <tr><td>Evidências</td><td>fotos, foto de referência, assinatura</td><td>comprovar a execução e o padrão</td></tr>
+        <tr><td>Comunicação</td><td>mensagens, confirmações de leitura, ocorrências</td><td>coordenar a equipe</td></tr>
+        <tr><td>Qualidade</td><td>auditorias, notas, temperaturas, validade</td><td>controlar riscos e conformidade</td></tr>
+      </table>
+
+      <h2>2. Compartilhamento</h2>
+      <p>Dados são hospedados no Supabase e a aplicação roda na Vercel. Notificações usam Web Push. O botão de WhatsApp apenas abre uma conversa com texto preenchido; nada é enviado automaticamente. Não vendemos dados nem os usamos para publicidade.</p>
+
+      <h2>3. Segurança</h2>
+      <p>Acesso ao banco exige JWT validado; a chave administrativa fica somente no servidor. Senhas são armazenadas com hash SHA-256. Conexões usam HTTPS.</p>
+
+      <h2>4. Retenção</h2>
+      <p>Os registros são mantidos enquanto necessários à operação e à conferência. Relatórios podem ser exportados. A exclusão de fotos e registros antigos pode ser solicitada ao gestor da operação.</p>
+
+      <h2>5. Seus direitos</h2>
+      <p>Você pode pedir acesso, correção, portabilidade, anonimização, bloqueio ou exclusão dos seus dados. Solicitações devem ser feitas ao gestor da operação.</p>
+
+      <h2>6. Armazenamento local</h2>
+      <p>Não há cookies de rastreamento. O app usa armazenamento local apenas para tema, fila offline e sessão.</p>
+
+      <footer>Versão de 27/11/2026 · Código-fonte e política completa no repositório do projeto.</footer>
+    </main>
+  </body>
+</html>

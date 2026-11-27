@@ -3,6 +3,7 @@ import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, Mess
 import { api, flushQueue, getAuthToken, queueSize, setAuthToken } from "./api";
 import { supabaseCreateUser, supabaseSignIn } from "./auth";
 import { comparePhotos } from "./vision";
+import { translate, type Lang } from "./i18n";
 import CameraGuide from "./components/CameraGuide";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 import QrModal from "./components/QrModal";
@@ -270,10 +271,13 @@ export default function App(){
   const [lockedUntil,setLockedUntil]=useState<Record<string,number>>({});
   const [nowTick,setNowTick]=useState(Date.now());
   const [theme,setTheme]=useState<"light"|"dark">(()=>{ try{ const stored=localStorage.getItem("dojo-theme"); if(stored==="dark"||stored==="light") return stored; return "dark"; }catch{ return "dark"; } });
+  const [lang,setLang]=useState<Lang>(()=>{ try{ return localStorage.getItem("dojo-lang")==="en"?"en":"pt"; }catch{ return "pt"; } });
+  const t = (key:string) => translate(lang,key);
   const [pushOn,setPushOn]=useState(false);
   const [pushBusy,setPushBusy]=useState(false);
   const [pushInfo,setPushInfo]=useState("");
   useEffect(()=>{ try{ document.documentElement.dataset.theme=theme; localStorage.setItem("dojo-theme",theme); }catch{} },[theme]);
+  useEffect(()=>{ try{ localStorage.setItem("dojo-lang",lang); document.documentElement.lang=lang; }catch{} },[lang]);
   useEffect(()=>{
     try{
       const posto = new URLSearchParams(window.location.search).get("posto");
@@ -2005,7 +2009,7 @@ export default function App(){
   const themeButton = <button type="button" onClick={()=>setTheme(theme==="light"?"dark":"light")} aria-label={theme==="light"?"Ativar modo escuro":"Ativar modo claro"} className="shrink-0 w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--ink)] border border-[var(--line)] pressable">{theme==="light"?<Moon size={18}/>:<Sun size={18}/>}</button>;
   const loginContent = (
     <div className="min-h-[100dvh] flex flex-col items-center justify-center px-4 py-8">
-      <div className="fixed top-3 right-3 z-40">{themeButton}</div>
+      <div className="fixed top-3 right-3 z-40 flex gap-2"><button type="button" onClick={()=>setLang(p=>p==="pt"?"en":"pt")} aria-label={t("language")} className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--ink)] border border-[var(--line)] text-[12px] font-extrabold pressable">{lang.toUpperCase()}</button>{themeButton}</div>
       <div className="flex flex-col items-center text-center">
         <span className="w-16 h-16 grid place-items-center rounded-[20px] bg-[var(--primary)] text-white"><ClipboardCheck size={32}/></span>
         <div className="font-extrabold tracking-tight text-[26px] leading-none mt-4">Dojo Checklist</div>
@@ -2013,17 +2017,18 @@ export default function App(){
         <p role="status" title={connectionError || undefined} className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-bold text-[var(--muted)]"><span aria-hidden="true" className="w-2 h-2 rounded-full" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} />{loading ? "Conectando…" : offlineMode ? `Conexão: erro — ${connectionError || "backend indisponível"}` : "Conectado"}</p>
       </div>
       <div className="w-full max-w-[440px] card p-6 sm:p-7 mt-7">
-        <h1 className="font-extrabold text-[24px] leading-tight tracking-tight text-center">Bem-vindo</h1>
-        <p className="text-[14px] text-[var(--muted)] text-center mt-2 leading-relaxed">Faça login para ver seu checklist</p>
+        <h1 className="font-extrabold text-[24px] leading-tight tracking-tight text-center">{t("welcome")}</h1>
+        <p className="text-[14px] text-[var(--muted)] text-center mt-2 leading-relaxed">{t("loginSub")}</p>
         {loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">Muitas tentativas. Aguarde {loginLockLeft}s</p>}
         {loginError && !loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">{loginError}</p>}
         <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void handleLoginSubmit();}}>
-          <label className="block"><span className="text-[13px] font-bold">Login</span><input autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={loginInput} onChange={e=>{setLoginInput(e.target.value); setLoginError("");}} placeholder="Ex.: wesley" className="field mt-2 !h-[56px] !text-[16px]" aria-label="Login"/></label>
-          <label className="block mt-4"><span className="text-[13px] font-bold">Senha</span><div className="relative mt-2"><input type={showPassword?"text":"password"} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={passwordInput} onChange={e=>{setPasswordInput(e.target.value); setLoginError("");}} placeholder="Sua senha" className="field !h-[56px] !text-[16px] !pr-[52px]" aria-label="Senha"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center text-[var(--muted)]" aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div></label>
-          <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none"><input type="checkbox" checked={rememberMe} onChange={e=>setRememberMe(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0"/><span className="text-[14px] font-semibold">Lembrar de mim</span></label>
-          <button type="submit" disabled={loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar</button>
+          <label className="block"><span className="text-[13px] font-bold">{t("login")}</span><input autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={loginInput} onChange={e=>{setLoginInput(e.target.value); setLoginError("");}} placeholder="Ex.: wesley" className="field mt-2 !h-[56px] !text-[16px]" aria-label="Login"/></label>
+          <label className="block mt-4"><span className="text-[13px] font-bold">{t("password")}</span><div className="relative mt-2"><input type={showPassword?"text":"password"} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={passwordInput} onChange={e=>{setPasswordInput(e.target.value); setLoginError("");}} placeholder="Sua senha" className="field !h-[56px] !text-[16px] !pr-[52px]" aria-label="Senha"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center text-[var(--muted)]" aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div></label>
+          <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none"><input type="checkbox" checked={rememberMe} onChange={e=>setRememberMe(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0"/><span className="text-[14px] font-semibold">{t("remember")}</span></label>
+          <button type="submit" disabled={loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">{t("enter")}</button>
         </form>
         <button type="button" onClick={()=>setQrOpen(true)} className="mt-4 w-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={18}/> QR do Dojo</button>
+        <a href="/privacidade.html" target="_blank" rel="noopener noreferrer" className="mt-3 block text-center text-[12px] font-bold text-[var(--muted)] underline">{t("privacy")}</a>
       </div>
       {msg && <p role="status" className="mt-4 text-[13px] text-[var(--muted)] text-center max-w-[440px]">{msg}</p>}
       {offlineMode && <p className="mt-3 text-[12px] text-[var(--muted)] text-center">Modo offline - histórico local</p>}
@@ -2032,7 +2037,7 @@ export default function App(){
   );
 
   const isChatDetail = tab==="chat" && !!conversation;
-  const navItems = [{id:"checklist" as Tab,label:"Checklist",icon:ClipboardCheck},{id:"chat" as Tab,label:"Chat",icon:MessageCircle},{id:"overview" as Tab,label:"Conferência",icon:LayoutDashboard},{id:"modules" as Tab,label:"Módulos",icon:CalendarDays}].filter(t=> isManager ? t.id!=="checklist" : t.id!=="overview");
+  const navItems = [{id:"checklist" as Tab,label:t("navChecklist"),icon:ClipboardCheck},{id:"chat" as Tab,label:t("navChat"),icon:MessageCircle},{id:"overview" as Tab,label:t("navOverview"),icon:LayoutDashboard},{id:"modules" as Tab,label:t("navModules"),icon:CalendarDays}].filter(t=> isManager ? t.id!=="checklist" : t.id!=="overview");
 
   return <div data-safe-area-inset-root className="app-shell overflow-x-clip" style={{boxSizing:"border-box",paddingTop:"var(--safe-area-inset-top)",minHeight:"100dvh"}}>
     {!authUser ? loginContent : <>
@@ -2040,11 +2045,12 @@ export default function App(){
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
         <span className="hidden sm:grid w-10 h-10 rounded-full place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
         <div className="min-w-0 flex-1 leading-tight">
-          <div className="font-extrabold tracking-tight text-[15px] sm:text-[19px] truncate">Olá, {authUser}</div>
+          <div className="font-extrabold tracking-tight text-[15px] sm:text-[19px] truncate">{t("hello")}, {authUser}</div>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <span role="status" title={connectionError || undefined} aria-label={loading ? "Conexão: conectando" : offlineMode ? "Conexão: erro" : "Conexão: conectado"} className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[var(--muted)] whitespace-nowrap"><span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{background: loading ? "var(--warning)" : offlineMode ? "var(--danger)" : "var(--green)"}} /><span className="hidden md:inline">{loading ? "Conectando…" : offlineMode ? "Conexão: erro" : "Conectado"}</span></span>
           <button type="button" disabled={pushBusy} onClick={()=>void handleEnablePush()} title="Ativar notificações de mensagens" aria-label={pushOn?"Notificações ativas":"Ativar notificações"} className={`w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full border pressable ${pushOn?"bg-[var(--success-bg)] border-[var(--success-border)] text-[var(--success-text)]":"bg-[var(--surface-2)] border-[var(--line)] text-[var(--ink)]"}`}><Bell size={18}/></button>
+          <button type="button" onClick={()=>setLang(p=>p==="pt"?"en":"pt")} aria-label={t("language")} className="w-10 h-10 min-w-[44px] min-h-[44px] grid place-items-center rounded-full bg-[var(--surface-2)] text-[var(--ink)] border border-[var(--line)] text-[12px] font-extrabold pressable">{lang.toUpperCase()}</button>
           {themeButton}
           <button onClick={handleLogout} aria-label="Sair" className="bg-white text-black font-bold text-[12px] sm:text-[13px] px-3 py-2 rounded-full whitespace-nowrap flex items-center gap-1 pressable"><LogOut size={14}/> <span className="hidden sm:inline">Sair</span></button>
         </div>
@@ -2122,8 +2128,8 @@ export default function App(){
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Somente a Gerência cadastra. O novo login entra na lista de pessoas, no seletor de conferência e no grupo do chat.</p>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">
           <label className="block"><span className="text-[13px] font-bold">Nome</span><input value={staffForm.name||""} onChange={e=>setStaffForm(p=>({...p,name:e.target.value}))} placeholder="Ex.: Ana Souza" className="field mt-1.5" aria-label="Nome do funcionário" /></label>
-          <label className="block"><span className="text-[13px] font-bold">Login</span><input value={staffForm.login||""} onChange={e=>setStaffForm(p=>({...p,login:e.target.value}))} placeholder="Ex.: ana" className="field mt-1.5" aria-label="Login do funcionário" /></label>
-          <label className="block"><span className="text-[13px] font-bold">Senha</span><input value={staffForm.password||""} onChange={e=>setStaffForm(p=>({...p,password:e.target.value}))} placeholder="dojo123" className="field mt-1.5" aria-label="Senha do funcionário" /></label>
+          <label className="block"><span className="text-[13px] font-bold">{t("login")}</span><input value={staffForm.login||""} onChange={e=>setStaffForm(p=>({...p,login:e.target.value}))} placeholder="Ex.: ana" className="field mt-1.5" aria-label="Login do funcionário" /></label>
+          <label className="block"><span className="text-[13px] font-bold">{t("password")}</span><input value={staffForm.password||""} onChange={e=>setStaffForm(p=>({...p,password:e.target.value}))} placeholder="dojo123" className="field mt-1.5" aria-label="Senha do funcionário" /></label>
           <label className="block"><span className="text-[13px] font-bold">Estação / setor</span><input value={staffForm.station||""} onChange={e=>setStaffForm(p=>({...p,station:e.target.value}))} placeholder="Ex.: Cozinha Quente" className="field mt-1.5" aria-label="Estação do funcionário" /></label>
           <label className="block"><span className="text-[13px] font-bold">Grupo do chat</span><select value={staffForm.group||""} onChange={e=>setStaffForm(p=>({...p,group:e.target.value}))} className="field mt-1.5" aria-label="Grupo do chat"><option value="">Sem grupo</option><option value="cozinha">Cozinha</option><option value="copa">Copa</option><option value="quiosque">Quiosque</option></select></label>
           <label className="block"><span className="text-[13px] font-bold">Turno</span><select value={staffForm.shift||"Manhã"} onChange={e=>setStaffForm(p=>({...p,shift:e.target.value}))} className="field mt-1.5" aria-label="Turno do funcionário"><option>Manhã</option><option>Tarde</option><option>Noite</option></select></label>
