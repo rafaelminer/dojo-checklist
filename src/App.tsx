@@ -17,7 +17,7 @@ type Shortage = { profile: string; date: string; itemId: string; itemName: strin
 type WeeklySubmission = { profile: string; weekKey: string; date: string; items: { itemId: string; status: Status }[]; status: "Aguardando" | "Aprovado"; fingerprint: string };
 type ExpiryEntry = { profile: string; date: string; product: string; expiryDate: string; registeredAt: string };
 type MaintEntry = { profile: string; date: string; itemId: string; status: Status; note: string };
-type CredentialRecord = { login: string; profile: string; password: string; station?: string; group?: string; shift?: string; unit?: string; pinHash?: string; replaces?: string; replacesProfile?: string };
+type CredentialRecord = { login: string; profile: string; password: string; station?: string; group?: string; shift?: string; unit?: string; replaces?: string; replacesProfile?: string };
 type SignatureRecord = { profile: string; date: string; time: string; data: string };
 type TempEntry = { profile: string; date: string; fria: string; freezer: string };
 type ShiftEntry = { profile: string; date: string; startedAt: string; startedBy: string; finishedAt?: string; finishedBy?: string };
@@ -406,8 +406,6 @@ export default function App(){
   const [historyMonth,setHistoryMonth]=useState(today().slice(0,7));
   const [consolidated,setConsolidated]=useState<{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}|null>(null);
   const [unitFilter,setUnitFilter]=useState("Todas");
-  const [pinMode,setPinMode]=useState(false);
-  const [pinLogin,setPinLogin]=useState<{profile:string;pin:string}>({profile:"",pin:""});
   const [signatureOpen,setSignatureOpen]=useState(false);
   const [signatures,setSignatures]=useState<{id:string;value:SignatureRecord}[]>([]);
   const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
@@ -821,12 +819,6 @@ export default function App(){
     setShowTodayDone(false); lastTempKey.current="";
   }
 
-  async function loginByPin(){
-    const cred = credentials.find(c=>c.value.profile===pinLogin.profile);
-    if(!cred?.value.pinHash){ setLoginError("Esta pessoa não tem PIN cadastrado."); return; }
-    if((await hashPassword(pinLogin.pin))!==cred.value.pinHash){ setLoginError("PIN incorreto."); return; }
-    setLoginError(""); enterApp(cred.value.profile); setMsg(`Olá, ${cred.value.profile}!`);
-  }
   async function handleLoginSubmit(){
     const loginKey = normalizeLogin(loginInput);
     if(!loginKey){ setLoginError("Digite seu login."); return; }
@@ -1845,7 +1837,6 @@ export default function App(){
       group:String(staffForm.group||"").trim(),
       shift:String(staffForm.shift||"Manhã").trim(),
       unit:String(staffForm.unit||"Matriz").trim(),
-      ...(String(staffForm.pin||"").trim() ? {pinHash: await hashPassword(String(staffForm.pin).trim())} : {}),
       ...(originalLogin ? {replaces:originalLogin} : {}),
       ...(originalProfile ? {replacesProfile:originalProfile} : {}),
     };
@@ -2156,20 +2147,14 @@ export default function App(){
       <div className="w-full max-w-[440px] card p-6 sm:p-7 mt-7">
         <h1 className="font-extrabold text-[24px] leading-tight tracking-tight text-center">Bem-vindo</h1>
         <p className="text-[14px] text-[var(--muted)] text-center mt-2 leading-relaxed">Faça login para ver seu checklist</p>
-        <div className="flex gap-2 mt-4"><button type="button" onClick={()=>{setPinMode(false);setLoginError("");}} className={`flex-1 chip ${!pinMode?"active":""}`}>Login e senha</button><button type="button" onClick={()=>{setPinMode(true);setLoginError("");}} className={`flex-1 chip ${pinMode?"active":""}`}>PIN (aparelho compartilhado)</button></div>
         {loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">Muitas tentativas. Aguarde {loginLockLeft}s</p>}
         {loginError && !loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">{loginError}</p>}
-        {!pinMode ? <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void handleLoginSubmit();}}>
+        <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void handleLoginSubmit();}}>
           <label className="block"><span className="text-[13px] font-bold">Login</span><input autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={loginInput} onChange={e=>{setLoginInput(e.target.value); setLoginError("");}} placeholder="Ex.: wesley" className="field mt-2 !h-[56px] !text-[16px]" aria-label="Login"/></label>
           <label className="block mt-4"><span className="text-[13px] font-bold">Senha</span><div className="relative mt-2"><input type={showPassword?"text":"password"} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={passwordInput} onChange={e=>{setPasswordInput(e.target.value); setLoginError("");}} placeholder="Sua senha" className="field !h-[56px] !text-[16px] !pr-[52px]" aria-label="Senha"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center text-[var(--muted)]" aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div></label>
           <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none"><input type="checkbox" checked={rememberMe} onChange={e=>setRememberMe(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0"/><span className="text-[14px] font-semibold">Lembrar de mim</span></label>
           <button type="submit" disabled={loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar</button>
-        </form> : <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void loginByPin();}}>
-          <label className="block"><span className="text-[13px] font-bold">Pessoa</span><select value={pinLogin.profile} onChange={e=>{setPinLogin(p=>({...p,profile:e.target.value}));setLoginError("");}} className="field mt-2 !h-[56px]" aria-label="Pessoa no PIN"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></label>
-          <label className="block mt-4"><span className="text-[13px] font-bold">PIN de 6 dígitos</span><input autoFocus inputMode="numeric" value={pinLogin.pin} onChange={e=>{setPinLogin(p=>({...p,pin:e.target.value.replace(/\D/g,"").slice(0,6)}));setLoginError("");}} placeholder="000000" className="field mt-2 !h-[56px] !text-[22px] tracking-[0.4em]" aria-label="PIN" /></label>
-          <button type="submit" disabled={!pinLogin.profile||pinLogin.pin.length!==6} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar com PIN</button>
-          <p className="mt-2 text-center text-[12px] text-[var(--muted)]">Para aparelho compartilhado na unidade.</p>
-        </form>}
+        </form>
         <button type="button" onClick={()=>setQrOpen(true)} className="mt-4 w-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={18}/> QR do Dojo</button>
       </div>
       {msg && <p role="status" className="mt-4 text-[13px] text-[var(--muted)] text-center max-w-[440px]">{msg}</p>}
@@ -2262,7 +2247,6 @@ export default function App(){
           <label className="block"><span className="text-[13px] font-bold">Grupo do chat</span><select value={staffForm.group||""} onChange={e=>setStaffForm(p=>({...p,group:e.target.value}))} className="field mt-1.5" aria-label="Grupo do chat"><option value="">Sem grupo</option><option value="cozinha">Cozinha</option><option value="copa">Copa</option><option value="quiosque">Quiosque</option></select></label>
           <label className="block"><span className="text-[13px] font-bold">Turno</span><select value={staffForm.shift||"Manhã"} onChange={e=>setStaffForm(p=>({...p,shift:e.target.value}))} className="field mt-1.5" aria-label="Turno do funcionário"><option>Manhã</option><option>Tarde</option><option>Noite</option></select></label>
           <label className="block"><span className="text-[13px] font-bold">Unidade</span><input value={staffForm.unit||"Matriz"} onChange={e=>setStaffForm(p=>({...p,unit:e.target.value}))} placeholder="Matriz" className="field mt-1.5" aria-label="Unidade do funcionário" /></label>
-          <label className="block"><span className="text-[13px] font-bold">PIN no aparelho compartilhado <span className="font-normal text-[var(--muted)]">(6 dígitos)</span></span><input value={staffForm.pin||""} onChange={e=>setStaffForm(p=>({...p,pin:e.target.value.replace(/\D/g,"").slice(0,6)}))} inputMode="numeric" placeholder="Opcional" className="field mt-1.5" aria-label="PIN do funcionário" /></label>
         </div>
         <div className="flex flex-wrap gap-2 mt-4"><button disabled={staffSaving} onClick={()=>void saveStaffRecord()} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3.5 text-[14px] disabled:opacity-50">{staffSaving ? "Salvando…" : staffEditingId ? "Salvar alterações" : "Cadastrar funcionário"}</button>{staffEditingId && <button onClick={resetStaffForm} className="bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-bold rounded-2xl px-5 py-3.5 text-[14px]">Cancelar edição</button>}</div>
         {staffMsg && <p role="status" className="mt-3 text-[13px] font-bold">{staffMsg}</p>}
