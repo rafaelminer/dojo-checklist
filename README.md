@@ -91,7 +91,8 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Onda 1 (referências Checa Aí / Chequei / OrganizaAí):** contagem de estoque com esperado × contado × diferença; recebimento de mercadorias item a item com status “Conferido/Divergente”; limites de temperatura configuráveis com alerta e histórico em gráfico; foto obrigatória em itens críticos; tarefas com dias da semana específicos.
 - **Onda 2 (auditoria de qualidade):** perguntas com tipo (check/foto/texto/temperatura), peso 1–5, nota mínima e foto de referência; respostas com veredito Conforme/Parcial/Não conforme e nota ponderada; foto capturada ao lado da referência para revisão da gerência.
 - **Onda 3:** botão “Alerta no WhatsApp” com texto preenchido (via `wa.me`, sem API paga); parecer consolidado com destaques/inconsistências/riscos/oportunidades; histórico em calendário com navegação por mês e resumo por dia.
-- **Onda 4 (parcial):** campo de unidade por funcionário com filtro no dashboard (ranking e “Por pessoa”); login por PIN de 6 dígitos em aparelho compartilhado (hash SHA-256); assinatura desenhada na tela ao fechar o turno. Ainda pendentes nesta onda: Supabase Auth/JWT e biblioteca de templates com IA.
+- **Onda 4 (parcial):** campo de unidade por funcionário com filtro no dashboard; assinatura desenhada na tela ao fechar o turno. PIN removido a pedido. Ainda pendentes: Supabase Auth/JWT e biblioteca de templates com IA.
+- **Varredura geral:** bugs corrigidos (parecer compartilhado, voz respeitando foto obrigatória, filtro de unidade ampliado, prazo em horário de Brasília, CSS órfão removido) e dashboard organizado em abas **Conferência / Equipe / Qualidade**.
 
 ## Notificações push
 
