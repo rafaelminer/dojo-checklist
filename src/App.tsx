@@ -8,7 +8,7 @@ import PhotoViewerModal from "./components/PhotoViewerModal";
 import VoiceModal from "./components/VoiceModal";
 import ProductSheet from "./components/ProductSheet";
 
-import type { Freq, Status, Section, Item, Entry, ChatMsg, SubmissionItem, Submission, ActionPlan, Handover, Shortage, WeeklySubmission, ExpiryEntry, MaintEntry, CredentialRecord, SignatureRecord, TempEntry, ShiftEntry, RecordRow, TaskRecord, LogbookRecord, TrainingRecord, InstructionRecord, StockItemRecord, StockCountRecord, ReceivingRecord, TempLimitRecord, ItemRuleRecord, QuestionRecord, QualityAnswerRecord, Tab, ChecklistRecord, ChecklistItemRecord, TaskTemplate } from "./data";
+import type { Freq, Status, Section, Item, Entry, ChatMsg, SubmissionItem, Submission, ActionPlan, Handover, Shortage, WeeklySubmission, ExpiryEntry, MaintEntry, CredentialRecord, SignatureRecord, TempEntry, ShiftEntry, RecordRow, TaskRecord, LogbookRecord, TrainingRecord, InstructionRecord, StockItemRecord, StockCountRecord, ReceivingRecord, TempLimitRecord, ItemRuleRecord, QuestionRecord, QualityAnswerRecord, TemplateRecord, CustomItemsRecord, Tab, ChecklistRecord, ChecklistItemRecord, TaskTemplate } from "./data";
 import { PROFILES, KIOSK_PROFILES, KIOSK_NIGHT_PROFILES, STATIONS, LOGIN_TO_PROFILE, DEFAULT_PASSWORD, STAFF_PROFILES, GROUP_CHANNELS, today, brazilNowString, fmtDate, nowTime, normalizeLogin, hashPassword, formatOverdue, addDays, daysBetween, parseTempValue, PISTA_GUIDE, byProfile, ALL_ITEMS, ITEM_DEPENDENCIES, SECTIONS, WEEKLY_ITEMS, OVERVIEW_FILTER_PEOPLE, MAINT_ITEMS, weekKeyFor, sectionsForProfile, complianceColor } from "./data";
 function drawQrCode(canvas:HTMLCanvasElement,text:string){
   const modules=29, quiet=4, size=modules+quiet*2, cell=10;
@@ -178,6 +178,8 @@ export default function App(){
   const [dashTab,setDashTab]=useState<"conferencia"|"equipe"|"qualidade">("conferencia");
   const [signatureOpen,setSignatureOpen]=useState(false);
   const [signatures,setSignatures]=useState<{id:string;value:SignatureRecord}[]>([]);
+  const [templates,setTemplates]=useState<{id:string;value:TemplateRecord}[]>([]);
+  const [customItems,setCustomItems]=useState<{id:string;value:CustomItemsRecord}[]>([]);
   const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const drawingRef=useRef(false);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
@@ -285,6 +287,11 @@ export default function App(){
   const replacedProfiles = useMemo(()=> new Set(credentials.filter(c=>c.value.replacesProfile).map(c=>c.value.replacesProfile!)),[credentials]);
   const unitOf = (p:string) => credentials.find(c=>c.value.profile===p)?.value.unit || "Matriz";
   const inUnit = (p:string) => unitFilter==="Todas" || unitOf(p)===unitFilter;
+  const effectiveByProfile = useMemo<Record<string,Item[]>>(()=>{
+    const map:Record<string,Item[]> = {...byProfile};
+    customItems.forEach(r=>{ map[r.value.profile]=r.value.items; });
+    return map;
+  },[customItems]);
   const units = useMemo(()=> Array.from(new Set(["Matriz",...credentials.map(c=>c.value.unit).filter(Boolean)])) as string[], [credentials]);
   const staffProfiles = useMemo(()=> Array.from(new Set([...STAFF_PROFILES.filter(p=>!replacedProfiles.has(p)), ...credentials.map(c=>c.value.profile)])).filter(p=>p!=="Gerência"),[credentials,replacedProfiles]);
   const stationMap = useMemo<Record<string,string>>(()=> { const m={...STATIONS}; replacedProfiles.forEach(p=>delete m[p]); credentials.filter(c=>c.value.station).forEach(c=>{ m[c.value.profile]=c.value.station!; }); return m; },[credentials,replacedProfiles]);
@@ -523,7 +530,7 @@ export default function App(){
 
   async function reloadAux(){
     try{
-      const [t,l,tr,ii,rd,si,sc,rc,tl,ir,qu,qa,sg] = await Promise.all([
+      const [t,l,tr,ii,rd,si,sc,rc,tl,ir,qu,qa,sg,tp,ci2] = await Promise.all([
         api("records.list",{collection:"dojo_tasks",limit:200}),
         api("records.list",{collection:"dojo_logbook",limit:200}),
         api("records.list",{collection:"dojo_trainings",limit:200}),
@@ -537,6 +544,8 @@ export default function App(){
         api("records.list",{collection:"dojo_questions",limit:500}),
         api("records.list",{collection:"dojo_quality_answers",limit:1000}),
         api("records.list",{collection:"dojo_signatures",limit:200}),
+        api("records.list",{collection:"dojo_templates",limit:200}),
+        api("records.list",{collection:"dojo_custom_items",limit:200}),
       ]);
       setTasks((t.records||[]) as any);
       setLogbook((l.records||[]) as any);
@@ -551,6 +560,8 @@ export default function App(){
       setQuestions((qu.records||[]) as any);
       setQualityAnswers((qa.records||[]) as any);
       setSignatures((sg.records||[]) as any);
+      setTemplates((tp.records||[]) as any);
+      setCustomItems((ci2.records||[]) as any);
     }catch{}
   }
   useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
@@ -622,7 +633,7 @@ export default function App(){
     setMsg(`Olá, ${profile}!`);
   }
 
-  const items = selected?byProfile[selected]||[]:[];
+  const items = selected?effectiveByProfile[selected]||[]:[];
   const isKioskSelected = selected ? KIOSK_PROFILES.includes(selected) : false;
   const activeSections: Section[] = selected ? sectionsForProfile(selected) : SECTIONS;
   const itemsForSection = (sec:Section) => items.filter(i=> i.section===sec && (sec!=="Produção" || isKioskSelected || i.freq===period));
@@ -643,7 +654,7 @@ export default function App(){
 
   const people = useMemo(()=>PROFILES.filter(p=>p!=="Gerência"),[]);
   function personStatsFor(person:string, dateStr:string){
-    const list = byProfile[person]||[];
+    const list = effectiveByProfile[person]||[];
     let feitos=0, faltam=0;
     list.forEach(it=>{
       const s = entries[`${person}|${dateStr}|${it.id}`]?.value.status || "";
@@ -766,7 +777,7 @@ export default function App(){
     const out:string[]=[];
     const yesterday=addDays(date,-1), dayBefore=addDays(date,-2);
     people.forEach(p=>{
-      const list=(byProfile[p]||[]);
+      const list=(effectiveByProfile[p]||[]);
       const nao=list.filter(it=>entries[`${p}|${date}|${it.id}`]?.value.status==="Não feito");
       if(nao.length){
         const secs=Array.from(new Set(nao.map(i=>i.section))).join(", ");
@@ -775,7 +786,7 @@ export default function App(){
       nao.forEach(it=>{
         if(entries[`${p}|${yesterday}|${it.id}`]?.value.status==="Não feito") out.push(`${p} repete Não feito há 2 dias: ${it.name} — verificar causa`);
       });
-      const pct3=[date,yesterday,dayBefore].map(d=>{ const l=(byProfile[p]||[]); const f=l.filter(it=>entries[`${p}|${d}|${it.id}`]?.value.status==="Feito").length; return l.length?Math.round(f/l.length*100):-1; });
+      const pct3=[date,yesterday,dayBefore].map(d=>{ const l=(effectiveByProfile[p]||[]); const f=l.filter(it=>entries[`${p}|${d}|${it.id}`]?.value.status==="Feito").length; return l.length?Math.round(f/l.length*100):-1; });
       if(pct3.every(v=>v===100)) out.push(`${p} concluiu 100% nos últimos 3 dias`);
     });
     const tempOut=(d:string)=>{ const t=temps[`${""}|${d}`]; return t; };
@@ -796,7 +807,7 @@ export default function App(){
     lines.push(`RESUMO`, `Hoje: ${completedSectionsToday} / ${expectedSectionsToday} concluídos`, `% Conformidade Hoje: ${complianceToday}%`, `Planos de Ação Pendentes: ${pendingPlansCount}`, `Atrasados: ${delayedList.list.length}`, ``);
     lines.push(`POR PESSOA`);
     perPersonProgress.forEach(p=>{
-      const nao=(byProfile[p.person]||[]).filter(it=>entries[`${p.person}|${date}|${it.id}`]?.value.status==="Não feito");
+      const nao=(effectiveByProfile[p.person]||[]).filter(it=>entries[`${p.person}|${date}|${it.id}`]?.value.status==="Não feito");
       lines.push(`${p.person} — ${stationMap[p.person]||""} — ${p.feitos}/${p.total} — ${p.pct}% conformidade — Iniciado: ${p.shift?.startedAt||"—"} — Concluído: ${p.shift?.finishedAt||"—"}`);
       nao.forEach(it=>{ const e=entries[`${p.person}|${date}|${it.id}`]?.value; lines.push(`  Não feito: ${it.name} — Motivo: ${e?.justificativa||"Sem justificativa"}`); });
     });
@@ -848,7 +859,7 @@ export default function App(){
   function buildConsolidated(){
     const out:{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}={destaques:[],inconsistencias:[],riscos:[],oportunidades:[]};
     const lastDays = Array.from({length:7},(_,i)=>addDays(date,-i));
-    const perfect = staffProfiles.filter(p=>lastDays.every(d=>{ const list=byProfile[p]||[]; if(!list.length) return false; const f=list.filter(i=>entries[`${p}|${d}|${i.id}`]?.value.status==="Feito").length; return f===list.length; }));
+    const perfect = staffProfiles.filter(p=>lastDays.every(d=>{ const list=effectiveByProfile[p]||[]; if(!list.length) return false; const f=list.filter(i=>entries[`${p}|${d}|${i.id}`]?.value.status==="Feito").length; return f===list.length; }));
     if(perfect.length) out.destaques.push(`${perfect.join(", ")} com 100% nos últimos 7 dias.`);
     const failCount = new Map<string,number>();
     lastDays.forEach(d=>Object.values(entries).forEach(r=>{ if(r.value.date===d && r.value.status==="Não feito") failCount.set(r.value.itemId,(failCount.get(r.value.itemId)||0)+1); }));
@@ -1646,6 +1657,39 @@ export default function App(){
     return `${t.dueDate}T${t.dueTime||"23:59"}` < brazilNowString();
   }
   function tempLimitFor(key:"fria"|"freezer"){ return tempLimits.find(r=>r.value.key===key)?.value; }
+  function generateFromDescription(desc:string):Item[]{
+    const q = normalizeLogin(desc);
+    const found = ALL_ITEMS.filter(i=>{
+      const n = normalizeLogin(i.name);
+      return q.includes(n) || n.split(" ").some(w=>w.length>=4 && q.includes(w));
+    }).slice(0,30);
+    if(found.length) return found;
+    const sec:Section = q.includes("limpeza") ? "Limpeza" : q.includes("organizacao") || q.includes("organização") ? "Organização" : "Produção";
+    return ALL_ITEMS.filter(i=>i.section===sec).slice(0,20);
+  }
+  async function saveTemplate(){
+    if(!isManager){ setMsg("Somente a Gerência cria modelos."); return; }
+    const name = String(auxForm.tplName||"").trim();
+    if(!name){ setMsg("Dê um nome ao modelo."); return; }
+    const desc = String(auxForm.tplDesc||"").trim();
+    const source = String(auxForm.tplSource||selected||"Wesley");
+    const items = desc ? generateFromDescription(desc) : [...(effectiveByProfile[source]||[])];
+    if(!items.length){ setMsg("Nenhum item encontrado para o modelo."); return; }
+    const value:TemplateRecord = { name, description:desc, items, createdAt:new Date().toISOString() };
+    try{ await api("records.create",{collection:"dojo_templates",value}); setAuxForm({}); await reloadAux(); setMsg(`Modelo “${name}” salvo com ${items.length} itens.`); }catch{ setMsg("Não foi possível salvar o modelo."); }
+  }
+  async function applyTemplate(row:{id:string;value:TemplateRecord}){
+    if(!isManager){ setMsg("Somente a Gerência aplica modelos."); return; }
+    const target = String(auxForm.tplTarget||"").trim();
+    if(!target){ setMsg("Escolha a pessoa/posto de destino."); return; }
+    const value:CustomItemsRecord = { profile:target, items:row.value.items, updatedAt:new Date().toISOString() };
+    const existing = customItems.find(c=>c.value.profile===target);
+    try{
+      if(existing) await api("records.replace",{collection:"dojo_custom_items",id:existing.id,value});
+      else await api("records.create",{collection:"dojo_custom_items",value});
+      await reloadAux(); setMsg(`Modelo aplicado a ${target}.`);
+    }catch{ setMsg("Não foi possível aplicar o modelo."); }
+  }
   async function saveQuestion(){
     if(!isManager){ setMsg("Somente a Gerência cria perguntas."); return; }
     const question = String(auxForm.qText||"").trim();
@@ -1843,11 +1887,11 @@ export default function App(){
   },[selected,date,entries,activeSections,unitFilter]);
   const sharedProduction = useMemo(()=>{
     if(!selected) return [] as {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}[];
-    const mine = new Set((byProfile[selected]||[]).filter(i=>String(i.section||"").includes("Produção")).map(i=>i.id));
-    return Object.keys(byProfile)
+    const mine = new Set((effectiveByProfile[selected]||[]).filter(i=>String(i.section||"").includes("Produção")).map(i=>i.id));
+    return Object.keys(effectiveByProfile)
       .filter(p=>p!==selected && p!=="Gerência" && inUnit(p))
       .map(p=>{
-        const shared=(byProfile[p]||[]).filter(i=>mine.has(i.id) && String(i.section||"").includes("Produção"));
+        const shared=(effectiveByProfile[p]||[]).filter(i=>mine.has(i.id) && String(i.section||"").includes("Produção"));
         if(!shared.length) return null;
         const doneMe=shared.filter(i=>entryFor(i.id).status==="Feito").length;
         const doneThem=shared.filter(i=>entries[`${p}|${date}|${i.id}`]?.value.status==="Feito").length;
@@ -2032,6 +2076,18 @@ export default function App(){
           <p className="text-[12px] text-[var(--muted)] mt-1.5">Iniciado {p.shift?.startedAt||"—"} • Concluído {p.shift?.finishedAt||"—"}</p>
         </li>)}</ul>
       </section>
+      <section className="card p-5 mt-4" aria-label="Modelos de checklist" data-group="equipe">
+        <h3 className="font-extrabold text-[18px]">Modelos de checklist</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Copie os itens de um posto ou descreva a rotina e o app monta um modelo. Depois aplique a qualquer pessoa.</p>
+        <div className="grid gap-3 mt-4 sm:grid-cols-2">
+          <label className="block"><span className="text-[13px] font-bold">Nome do modelo</span><input value={auxForm.tplName||""} onChange={e=>setAuxForm(p=>({...p,tplName:e.target.value}))} placeholder="Ex.: Abertura do quiosque" className="field mt-1.5" aria-label="Nome do modelo" /></label>
+          <label className="block"><span className="text-[13px] font-bold">Copiar itens de</span><select value={auxForm.tplSource||selected||""} onChange={e=>setAuxForm(p=>({...p,tplSource:e.target.value}))} className="field mt-1.5" aria-label="Origem do modelo"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></label>
+          <label className="block sm:col-span-2"><span className="text-[13px] font-bold">Ou descreva a rotina <span className="font-normal text-[var(--muted)]">(gera itens por palavras-chave)</span></span><input value={auxForm.tplDesc||""} onChange={e=>setAuxForm(p=>({...p,tplDesc:e.target.value}))} placeholder="Ex.: limpeza das bancadas, câmaras e validade" className="field mt-1.5" aria-label="Descrição do modelo" /></label>
+        </div>
+        <button onClick={()=>void saveTemplate()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[13px]">Salvar modelo</button>
+        <div className="flex flex-wrap items-center gap-2 mt-4"><span className="text-[12px] font-bold text-[var(--muted)]">Aplicar a:</span><select value={auxForm.tplTarget||""} onChange={e=>setAuxForm(p=>({...p,tplTarget:e.target.value}))} className="field !mt-0 min-w-[160px]" aria-label="Destino do modelo"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></div>
+        <ul className="mt-4 space-y-2">{templates.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum modelo salvo.</li> : templates.map(r=><li key={r.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{r.value.name} <span className="text-[12px] font-normal text-[var(--muted)]">· {r.value.items.length} itens</span></span><button onClick={()=>void applyTemplate(r)} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Aplicar</button></li>)}</ul>
+      </section>
       <section className="card p-5 mt-4" aria-label="Cadastro de funcionários" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Cadastro de funcionários</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Somente a Gerência cadastra. O novo login entra na lista de pessoas, no seletor de conferência e no grupo do chat.</p>
@@ -2115,7 +2171,7 @@ export default function App(){
       <section className="card p-5 mt-4" aria-label="Regras de qualidade" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Regras de qualidade</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Exija foto antes de marcar um item como Feito.</p>
-        <div className="flex flex-wrap gap-2 mt-3"><select value={auxForm.ruleItem||""} onChange={e=>setAuxForm(p=>({...p,ruleItem:e.target.value}))} className="field flex-1 min-w-[200px]" aria-label="Item da regra"><option value="">Selecione o item</option>{(byProfile[selected||""]||ALL_ITEMS).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button disabled={!auxForm.ruleItem} onClick={()=>void togglePhotoRule(auxForm.ruleItem!)} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px] disabled:opacity-50">{itemRules.find(r=>r.value.itemId===auxForm.ruleItem)?.value.requirePhoto?"Remover exigência":"Exigir foto"}</button></div>
+        <div className="flex flex-wrap gap-2 mt-3"><select value={auxForm.ruleItem||""} onChange={e=>setAuxForm(p=>({...p,ruleItem:e.target.value}))} className="field flex-1 min-w-[200px]" aria-label="Item da regra"><option value="">Selecione o item</option>{(effectiveByProfile[selected||""]||ALL_ITEMS).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button disabled={!auxForm.ruleItem} onClick={()=>void togglePhotoRule(auxForm.ruleItem!)} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px] disabled:opacity-50">{itemRules.find(r=>r.value.itemId===auxForm.ruleItem)?.value.requirePhoto?"Remover exigência":"Exigir foto"}</button></div>
         <div className="flex flex-wrap gap-2 mt-3">{itemRules.filter(r=>r.value.requirePhoto).map(r=><span key={r.id} className="chip">{ALL_ITEMS.find(i=>i.id===r.value.itemId)?.name||r.value.itemId} 📷</span>)}</div>
       </section>
       <section id="dash-equipe" className="card p-5 mt-4" aria-label="Tarefas avulsas" data-group="equipe">
@@ -2517,7 +2573,7 @@ export default function App(){
       suggestion={suggestedFor(productItem)}
       section={displaySectionTitle(productItem.section)}
       yesterday={(()=>{ const y=addDays(date,-1); const ye=entries[`${selected}|${y}|${productItem.id}`]?.value; return `${ye?.status||"sem registro"}${ye?.feito?` · ${ye.feito} un.`:""}`; })()}
-      colleagues={Object.keys(byProfile).filter(p=>p!==selected && p!=="Gerência" && (byProfile[p]||[]).some(i=>i.id===productItem.id)).map(p=>({name:p,status:entries[`${p}|${date}|${productItem.id}`]?.value.status||"—"}))}
+      colleagues={Object.keys(effectiveByProfile).filter(p=>p!==selected && p!=="Gerência" && (effectiveByProfile[p]||[]).some(i=>i.id===productItem.id)).map(p=>({name:p,status:entries[`${p}|${date}|${productItem.id}`]?.value.status||"—"}))}
       saving={saving}
       readOnly={readOnly}
       onStatus={st=>{ void setStatus(productItem,st); setProductItem(null); }}
