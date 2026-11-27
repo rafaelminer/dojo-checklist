@@ -30,6 +30,8 @@ type StockCountRecord = { date: string; item: string; expected: number; counted:
 type ReceivingRecord = { date: string; supplier: string; invoice: string; item: string; expectedQty: string; receivedQty: string; status: "Conferido" | "Divergente"; notes: string; profile: string; time: string };
 type TempLimitRecord = { key: "fria" | "freezer"; min: number; max: number };
 type ItemRuleRecord = { itemId: string; requirePhoto: boolean };
+type QuestionRecord = { question: string; section: string; weight: number; minScore: number; type: "check" | "photo" | "text" | "temperature"; hint?: string; referencePhoto?: string; createdAt: string };
+type QualityAnswerRecord = { date: string; questionId: string; question: string; profile: string; verdict: "Conforme" | "Parcial" | "Não conforme"; score: number; note: string; photo: string; temperature: string; time: string; reviewedBy?: string; reviewedVerdict?: string };
 type Tab = "overview" | "checklist" | "chat" | "modules";
 type ChecklistRecord = { profile: string; date: string; title: string; turno?: string; perfil?: string };
 type ChecklistItemRecord = { checklistId?: string; itemId?: string; name: string; target?: string; section?: string; freq?: string; photo_url?: string; photo?: string };
@@ -396,6 +398,9 @@ export default function App(){
   const [receivings,setReceivings]=useState<{id:string,value:ReceivingRecord}[]>([]);
   const [tempLimits,setTempLimits]=useState<{id:string,value:TempLimitRecord}[]>([]);
   const [itemRules,setItemRules]=useState<{id:string,value:ItemRuleRecord}[]>([]);
+  const [questions,setQuestions]=useState<{id:string,value:QuestionRecord}[]>([]);
+  const [qualityAnswers,setQualityAnswers]=useState<{id:string,value:QualityAnswerRecord}[]>([]);
+  const [qualityDraft,setQualityDraft]=useState<Record<string,{verdict?:string;note?:string;photo?:string;temperature?:string}>>({});
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
   const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
@@ -736,7 +741,7 @@ export default function App(){
 
   async function reloadAux(){
     try{
-      const [t,l,tr,ii,rd,si,sc,rc,tl,ir] = await Promise.all([
+      const [t,l,tr,ii,rd,si,sc,rc,tl,ir,qu,qa] = await Promise.all([
         api("records.list",{collection:"dojo_tasks",limit:200}),
         api("records.list",{collection:"dojo_logbook",limit:200}),
         api("records.list",{collection:"dojo_trainings",limit:200}),
@@ -747,6 +752,8 @@ export default function App(){
         api("records.list",{collection:"dojo_receivings",limit:500}),
         api("records.list",{collection:"dojo_temp_limits",limit:50}),
         api("records.list",{collection:"dojo_item_rules",limit:500}),
+        api("records.list",{collection:"dojo_questions",limit:500}),
+        api("records.list",{collection:"dojo_quality_answers",limit:1000}),
       ]);
       setTasks((t.records||[]) as any);
       setLogbook((l.records||[]) as any);
@@ -758,6 +765,8 @@ export default function App(){
       setReceivings((rc.records||[]) as any);
       setTempLimits((tl.records||[]) as any);
       setItemRules((ir.records||[]) as any);
+      setQuestions((qu.records||[]) as any);
+      setQualityAnswers((qa.records||[]) as any);
     }catch{}
   }
   useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
@@ -1760,6 +1769,49 @@ export default function App(){
     return `${t.dueDate}T${t.dueTime||"23:59"}` < nowLocalString();
   }
   function tempLimitFor(key:"fria"|"freezer"){ return tempLimits.find(r=>r.value.key===key)?.value; }
+  async function saveQuestion(){
+    if(!isManager){ setMsg("Somente a Gerência cria perguntas."); return; }
+    const question = String(auxForm.qText||"").trim();
+    if(!question){ setMsg("Escreva a pergunta."); return; }
+    const value:QuestionRecord = { question, section:String(auxForm.qSection||"Produção").trim(), weight:Math.max(1,Math.min(5,Number(auxForm.qWeight||3))), minScore:Number(auxForm.qMin||7.5), type:(auxForm.qType||"check") as QuestionRecord["type"], hint:String(auxForm.qHint||"").trim(), referencePhoto:String(auxForm.qRef||""), createdAt:new Date().toISOString() };
+    try{ await api("records.create",{collection:"dojo_questions",value}); setAuxForm({}); await reloadAux(); setMsg("Pergunta de auditoria criada."); }catch{ setMsg("Não foi possível criar a pergunta."); }
+  }
+  function qualityScoreFor(profile:string){
+    const list = qualityAnswers.filter(a=>a.value.date===date && a.value.profile===profile);
+    if(!list.length) return null;
+    let totalWeight=0, totalScore=0;
+    list.forEach(a=>{
+      const q = questions.find(x=>x.id===a.value.questionId)?.value;
+      const w = q?.weight || 3;
+      totalWeight += w; totalScore += (a.value.score||0)*w;
+    });
+    const score = totalWeight ? Math.round(totalScore/totalWeight*10)/10 : 0;
+    return { score, count:list.length, verdict: score>=7.5?"Conforme":score>=5?"Parcial":"Não conforme" };
+  }
+  async function saveQualityAnswer(q:{id:string;value:QuestionRecord}){
+    const d = qualityDraft[q.id]||{};
+    let verdict:QualityAnswerRecord["verdict"]="Conforme";
+    let score=10;
+    if(q.value.type==="check"){
+      verdict = (d.verdict as QualityAnswerRecord["verdict"])||"Conforme";
+      score = verdict==="Conforme"?10:verdict==="Parcial"?6:0;
+    }else{
+      const filled = q.value.type==="photo" ? !!d.photo : q.value.type==="temperature" ? !!d.temperature : !!d.note?.trim();
+      verdict = filled?"Conforme":"Não conforme";
+      score = filled?10:0;
+    }
+    const value:QualityAnswerRecord = { date, questionId:q.id, question:q.value.question, profile:selected||"", verdict, score, note:d.note||"", photo:d.photo||"", temperature:d.temperature||"", time:nowTime() };
+    try{
+      await api("records.create",{collection:"dojo_quality_answers",value});
+      setQualityDraft(p=>({...p,[q.id]:{}}));
+      await reloadAux();
+      setMsg(`Auditoria salva: ${verdict}.`);
+    }catch{ setMsg("Não foi possível salvar a auditoria."); }
+  }
+  async function reviewQuality(row:{id:string;value:QualityAnswerRecord}, ok:boolean){
+    const value = {...row.value, reviewedBy:authUser||"", reviewedVerdict: ok?"Conforme":"Não conforme"};
+    try{ await api("records.replace",{collection:"dojo_quality_answers",id:row.id,value}); await reloadAux(); setMsg("Auditoria revisada."); }catch{ setMsg("Não foi possível revisar."); }
+  }
   async function saveStockItem(){
     if(!isManager){ setMsg("Somente a Gerência cadastra itens de estoque."); return; }
     const item = String(auxForm.stockItem||"").trim();
@@ -2147,6 +2199,24 @@ export default function App(){
         <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Últimos 7 dias — {selected}</p>
         <div className="flex items-end gap-2 mt-3 h-[100px]">{Array.from({length:7},(_,i)=>addDays(date,-(6-i))).map(d=>{ const v=temps[`${selected}|${d}`]?.value; const n=parseTempValue(v?.fria||""); const h=n===null?0:Math.min(100,Math.max(6,Math.round((n+10)/20*100))); return <div key={d} className="flex-1 flex flex-col items-center gap-1"><div className="w-full rounded-t-lg bg-[var(--primary)]" style={{height:`${h}%`}} title={n===null?"sem registro":`${n} °C`} /><span className="text-[10px] text-[var(--muted)]">{d.slice(8)}</span></div>; })}</div>
       </section>
+      <section className="card p-5 mt-4" aria-label="Auditoria de qualidade">
+        <h3 className="font-extrabold text-[18px]">Auditoria de qualidade</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Perguntas com peso e nota mínima; a foto tirada aparece ao lado da referência para conferência.</p>
+        <div className="grid gap-3 mt-4 sm:grid-cols-2">
+          <label className="block sm:col-span-2"><span className="text-[13px] font-bold">Pergunta</span><input value={auxForm.qText||""} onChange={e=>setAuxForm(p=>({...p,qText:e.target.value}))} placeholder="Ex.: Bancada limpa e sem resíduos" className="field mt-1.5" aria-label="Pergunta da auditoria" /></label>
+          <label className="block"><span className="text-[13px] font-bold">Seção</span><select value={auxForm.qSection||"Produção"} onChange={e=>setAuxForm(p=>({...p,qSection:e.target.value}))} className="field mt-1.5" aria-label="Seção da pergunta">{SECTIONS.map(s=><option key={s}>{s}</option>)}</select></label>
+          <label className="block"><span className="text-[13px] font-bold">Tipo</span><select value={auxForm.qType||"check"} onChange={e=>setAuxForm(p=>({...p,qType:e.target.value}))} className="field mt-1.5" aria-label="Tipo de pergunta"><option value="check">Conforme / Parcial / Não conforme</option><option value="photo">Foto</option><option value="text">Observação</option><option value="temperature">Temperatura</option></select></label>
+          <label className="block"><span className="text-[13px] font-bold">Peso (1–5)</span><input type="number" min={1} max={5} value={auxForm.qWeight||"3"} onChange={e=>setAuxForm(p=>({...p,qWeight:e.target.value}))} className="field mt-1.5" aria-label="Peso da pergunta" /></label>
+          <label className="block"><span className="text-[13px] font-bold">Nota mínima</span><input type="number" step="0.5" value={auxForm.qMin||"7.5"} onChange={e=>setAuxForm(p=>({...p,qMin:e.target.value}))} className="field mt-1.5" aria-label="Nota mínima" /></label>
+          <label className="block sm:col-span-2"><span className="text-[13px] font-bold">Dica para a equipe</span><input value={auxForm.qHint||""} onChange={e=>setAuxForm(p=>({...p,qHint:e.target.value}))} placeholder="Como deve estar o padrão" className="field mt-1.5" aria-label="Dica da pergunta" /></label>
+          <div className="sm:col-span-2"><span className="text-[13px] font-bold">Foto de referência</span><PhotoField value={auxForm.qRef||""} onChange={data=>setAuxForm(p=>({...p,qRef:data}))} label="Foto de referência" /></div>
+        </div>
+        <button onClick={()=>void saveQuestion()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[13px]">Criar pergunta</button>
+        <ul className="mt-4 space-y-2">{questions.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma pergunta cadastrada.</li> : questions.map(r=><li key={r.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{r.value.question}</span><span className="text-[12px] text-[var(--muted)]">{r.value.section} · peso {r.value.weight} · mín {r.value.minScore}</span>{r.value.referencePhoto && <img src={r.value.referencePhoto} alt="Referência" className="w-10 h-10 object-cover rounded-lg border border-[var(--line)]" />}</li>)}</ul>
+        {(()=>{ const s=qualityScoreFor(selected||""); return s ? <p className="mt-4 rounded-xl bg-[var(--surface-2)] p-3 text-[14px] font-bold">Nota de {selected}: {s.score}/10 · {s.verdict} ({s.count} respostas)</p> : null; })()}
+        <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Respostas de hoje — {selected}</p>
+        <ul className="mt-2 space-y-3">{qualityAnswers.filter(a=>a.value.date===date && a.value.profile===selected).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma resposta hoje.</li> : qualityAnswers.filter(a=>a.value.date===date && a.value.profile===selected).map(row=>{ const q=questions.find(x=>x.id===row.value.questionId)?.value; return <li key={row.id} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{row.value.question} · {row.value.verdict}</p><div className="flex flex-wrap gap-2 mt-2">{q?.referencePhoto && <div className="flex-1 min-w-[100px]"><p className="text-[11px] text-[var(--muted)]">Referência</p><img src={q.referencePhoto} alt="Referência" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]" /></div>}{row.value.photo && <div className="flex-1 min-w-[100px]"><p className="text-[11px] text-[var(--muted)]">Capturada</p><img src={row.value.photo} alt="Capturada" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]" /></div>}</div>{row.value.note && <p className="text-[13px] mt-2">{row.value.note}</p>}{row.value.reviewedBy ? <p className="text-[12px] font-bold text-[var(--success-text)] mt-2">Revisado por {row.value.reviewedBy} · {row.value.reviewedVerdict}</p> : <div className="flex gap-2 mt-2"><button onClick={()=>void reviewQuality(row,true)} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Confirmar</button><button onClick={()=>void reviewQuality(row,false)} className="bg-[var(--danger)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Reprovar</button></div>}</li>; })}</ul>
+      </section>
       <section className="card p-5 mt-4" aria-label="Regras de qualidade">
         <h3 className="font-extrabold text-[18px]">Regras de qualidade</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Exija foto antes de marcar um item como Feito.</p>
@@ -2277,6 +2347,18 @@ export default function App(){
         </div>
         <button onClick={()=>void saveReceiving()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[13px]">Registrar recebimento</button>
         <ul className="mt-3 space-y-2">{receivings.filter(r=>r.value.date===date && r.value.profile===authUser).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum recebimento seu hoje.</li> : receivings.filter(r=>r.value.date===date && r.value.profile===authUser).map(r=><li key={r.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{r.value.item} · {r.value.status}</p><p className="text-[12px] text-[var(--muted)]">{r.value.supplier||"—"} · nota {r.value.invoice||"—"} · {r.value.expectedQty||"—"} → {r.value.receivedQty||"—"}</p></li>)}</ul>
+      </section>
+      <section className="mt-4 card p-5" aria-label="Auditoria de qualidade">
+        <h3 className="font-extrabold text-[18px]">Auditoria de qualidade</h3>
+        {questions.filter(q=>activeSections.includes(q.value.section as Section)).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma pergunta de auditoria para o seu posto.</p> : <ul className="mt-3 space-y-4">{questions.filter(q=>activeSections.includes(q.value.section as Section)).map(q=>{ const d=qualityDraft[q.id]||{}; const answered=qualityAnswers.some(a=>a.value.date===date&&a.value.questionId===q.id&&a.value.profile===authUser); return <li key={q.id} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><p className="font-bold text-[15px]">{q.value.question}</p>{q.value.hint && <p className="text-[12px] text-[var(--muted)] mt-0.5">{q.value.hint}</p>}
+          {q.value.referencePhoto && <div className="mt-2"><p className="text-[11px] font-bold text-[var(--muted)]">Padrão de referência</p><img src={q.value.referencePhoto} alt="Referência" className="w-24 h-24 object-cover rounded-xl border border-[var(--line)] mt-1" /></div>}
+          {q.value.type==="check" && <div className="flex flex-wrap gap-2 mt-2">{(["Conforme","Parcial","Não conforme"] as const).map(v=><button key={v} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],verdict:v}}))} className={`chip ${d.verdict===v?"active":""}`}>{v}</button>)}</div>}
+          {q.value.type==="photo" && <div className="mt-2"><PhotoField value={d.photo||""} onChange={data=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],photo:data}}))} label="Foto da auditoria" /></div>}
+          {q.value.type==="temperature" && <input type="number" inputMode="decimal" value={d.temperature||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],temperature:e.target.value}}))} placeholder="°C" className="field mt-2" aria-label={`Temperatura ${q.value.question}`} />}
+          {q.value.type==="text" && <textarea value={d.note||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],note:e.target.value}}))} placeholder="Descreva o que foi conferido" className="field mt-2 min-h-[64px]" aria-label={`Observação ${q.value.question}`} />}
+          {q.value.type!=="text" && <textarea value={d.note||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],note:e.target.value}}))} placeholder="Observação (opcional)" className="field mt-2 min-h-[56px]" aria-label={`Observação ${q.value.question}`} />}
+          <div className="flex items-center gap-2 mt-2"><button disabled={answered||readOnly} onClick={()=>void saveQualityAnswer(q)} className="bg-[var(--primary)] text-white font-extrabold text-[12px] px-3 py-2 rounded-xl disabled:opacity-50">Salvar resposta</button>{answered && <span className="text-[12px] font-bold text-[var(--success-text)]">✓ Respondido</span>}</div>
+        </li>; })}</ul>}
       </section>
       <div className="[&>section]:mt-4">{sharedProductionSection()}</div>
 
