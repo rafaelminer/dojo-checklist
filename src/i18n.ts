@@ -1,3 +1,5 @@
+import { en as phrases } from "./phrases-en";
+
 export type Lang = "pt" | "en";
 
 const dict: Record<Lang, Record<string, string>> = {
@@ -36,5 +38,5 @@ const dict: Record<Lang, Record<string, string>> = {
 };
 
 export function translate(lang: Lang, key: string) {
-  return dict[lang][key] ?? dict.pt[key] ?? key;
+  return dict[lang][key] ?? (lang === "en" ? phrases[key] : undefined) ?? dict.pt[key] ?? key;
 }
