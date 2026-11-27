@@ -2,9 +2,14 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
 import { api, flushQueue, queueSize } from "./api";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
+import QrModal from "./components/QrModal";
+import SignatureModal from "./components/SignatureModal";
+import PhotoViewerModal from "./components/PhotoViewerModal";
+import VoiceModal from "./components/VoiceModal";
+import ProductSheet from "./components/ProductSheet";
 
 import type { Freq, Status, Section, Item, Entry, ChatMsg, SubmissionItem, Submission, ActionPlan, Handover, Shortage, WeeklySubmission, ExpiryEntry, MaintEntry, CredentialRecord, SignatureRecord, TempEntry, ShiftEntry, RecordRow, TaskRecord, LogbookRecord, TrainingRecord, InstructionRecord, StockItemRecord, StockCountRecord, ReceivingRecord, TempLimitRecord, ItemRuleRecord, QuestionRecord, QualityAnswerRecord, Tab, ChecklistRecord, ChecklistItemRecord, TaskTemplate } from "./data";
-import { PROFILES, KIOSK_PROFILES, KIOSK_NIGHT_PROFILES, STATIONS, LOGIN_TO_PROFILE, DEFAULT_PASSWORD, STAFF_PROFILES, GROUP_CHANNELS, today, brazilNowString, fmtDate, nowTime, normalizeLogin, hashPassword, formatOverdue, addDays, daysBetween, parseTempValue, prod, other, limpeza, organizacao, hot, blocoA, blocoB, quente, kioskManhaNovo, kioskNoiteNovo, kioskProdLais, kioskProdCleide, kioskProdTalia, kioskProdTayara, quiosque, PISTA_GUIDE, copa, byProfile, ALL_ITEMS, ITEM_DEPENDENCIES, SECTIONS, WEEKLY_ITEMS, OVERVIEW_FILTER_PEOPLE, MAINT_ITEMS, weekKeyFor, KIOSK_MORNING_SECTIONS, KIOSK_NIGHT_SECTIONS, sectionsForProfile, complianceColor } from "./data";
+import { PROFILES, KIOSK_PROFILES, KIOSK_NIGHT_PROFILES, STATIONS, LOGIN_TO_PROFILE, DEFAULT_PASSWORD, STAFF_PROFILES, GROUP_CHANNELS, today, brazilNowString, fmtDate, nowTime, normalizeLogin, hashPassword, formatOverdue, addDays, daysBetween, parseTempValue, PISTA_GUIDE, byProfile, ALL_ITEMS, ITEM_DEPENDENCIES, SECTIONS, WEEKLY_ITEMS, OVERVIEW_FILTER_PEOPLE, MAINT_ITEMS, weekKeyFor, sectionsForProfile, complianceColor } from "./data";
 function drawQrCode(canvas:HTMLCanvasElement,text:string){
   const modules=29, quiet=4, size=modules+quiet*2, cell=10;
   canvas.width=size*cell; canvas.height=size*cell;
@@ -2501,66 +2506,24 @@ export default function App(){
         <button disabled={handoverSaving} onClick={()=>{setHandoverDialogOpen(false); setPendingHandoverSection(null); setHandoverText("");}} className="w-full mt-2 text-[13px] font-bold text-[var(--muted)] py-2">Voltar</button>
       </div></div>
     </div>}
-    {qrOpen && <div className="fixed inset-0 z-50 overflow-y-auto pt-[max(1rem,var(--safe-area-inset-top))] pb-6 bg-black/70" role="dialog" aria-modal="true" aria-label="QR do Dojo">
-      <div className="min-h-full flex items-center justify-center px-4"><div className="w-full max-w-[400px] card p-6 text-center">
-        <h2 className="font-extrabold text-[22px]">QR do Dojo</h2>
-        <div className="bg-white rounded-2xl p-3 mt-4 mx-auto w-fit"><canvas ref={qrCanvasRef} className="w-[240px] h-[240px] max-w-full block" aria-label="QR code para abrir o Dojo" /></div>
-        <p className="text-[14px] text-[var(--muted)] mt-4 leading-relaxed">Aponte a câmera para abrir o Dojo</p>
-        <p className="text-[11px] text-[var(--muted)] mt-1 [overflow-wrap:anywhere]">{appLink}</p>
-        <button onClick={()=>setQrOpen(false)} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-3.5 text-[15px]">Fechar</button>
-      </div></div>
-    </div>}
-    {signatureOpen && <div className="fixed inset-0 z-[68] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Assinatura do turno">
-      <div className="w-full sm:max-w-[520px] card p-5 sheet rounded-b-none sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Assinatura</p><h2 className="font-extrabold text-[21px] mt-1">Assinar turno — {selected}</h2></div><button onClick={()=>setSignatureOpen(false)} aria-label="Fechar assinatura" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
-        <p className="text-[13px] text-[var(--muted)] mt-2">Desenhe sua assinatura com o dedo ou o mouse.</p>
-        <canvas ref={signatureCanvasRef} width={900} height={320} onPointerDown={sigDown} onPointerMove={sigMove} onPointerUp={sigUp} onPointerCancel={sigUp} className="w-full h-[180px] bg-white rounded-2xl border border-[var(--line)] mt-3 touch-none" aria-label="Área da assinatura" />
-        <div className="flex gap-2 mt-3"><button onClick={clearSignature} className="flex-1 bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Limpar</button><button onClick={()=>void saveSignature()} className="flex-1 bg-[var(--primary)] text-white font-extrabold py-3 rounded-2xl">Salvar assinatura</button></div>
-      </div>
-    </div>}
-    {authUser && photoViewer && <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Foto — ${photoViewer.label}`}>
-      <div className="w-full max-w-[620px] sheet">
-        <div className="flex items-center justify-between gap-2 text-white/90 mb-3"><p className="font-bold text-[14px] truncate">{photoViewer.label}</p><button onClick={()=>setPhotoViewer(null)} aria-label="Fechar foto" className="w-10 h-10 grid place-items-center rounded-full bg-white/15 pressable"><X size={20}/></button></div>
-        <img src={photoViewer.src} alt={`Foto — ${photoViewer.label}`} className="w-full max-h-[70dvh] object-contain rounded-2xl bg-black/40" />
-        <div className="flex gap-2 mt-3">
-          {photoViewer.onDelete && <button onClick={()=>photoViewer.onDelete?.()} className="flex-1 bg-[var(--danger)] text-white font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-1.5 pressable"><Trash2 size={16}/> Excluir foto</button>}
-          <button onClick={()=>setPhotoViewer(null)} className="flex-1 bg-white/15 text-white font-extrabold py-3.5 rounded-2xl pressable">Fechar</button>
-        </div>
-      </div>
-    </div>}
-    {authUser && quickEntryOpen && <div className="fixed inset-0 z-[66] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Falar ou anotar item">
-      <div className="w-full sm:max-w-[460px] card p-5 sheet rounded-b-none sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Mãos ocupadas</p><h2 className="font-extrabold text-[21px] mt-1">Falar ou anotar item</h2></div><button onClick={()=>{setQuickEntryOpen(false);setListening(false);}} aria-label="Fechar" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
-        <p className="text-[13px] text-[var(--muted)] mt-2 leading-relaxed">Diga ou escreva o nome do produto e a quantidade. Exemplo: <b>Ebi Hot 12</b>. O item será marcado como Feito.</p>
-        {(typeof window!=="undefined" && !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition) && <button type="button" disabled={listening} onClick={startVoice} className="w-full mt-4 bg-[var(--primary)] text-white font-extrabold py-3.5 rounded-2xl flex items-center justify-center gap-2 disabled:opacity-60"><Mic size={18}/>{listening?"Ouvindo… fale agora":"🎤 Falar item"}</button>}
-        <label className="block mt-4"><span className="text-[13px] font-bold">Ou digite</span><input autoFocus value={quickEntryText} onChange={e=>setQuickEntryText(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"&&quickEntryText.trim()) void handleVoice(quickEntryText.trim());}} placeholder="Ex.: Ebi Hot 12" className="field mt-2" aria-label="Item e quantidade" /></label>
-        <div className="flex gap-2 mt-3"><button onClick={()=>setQuickEntryOpen(false)} className="flex-1 bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Cancelar</button><button disabled={!quickEntryText.trim()} onClick={()=>void handleVoice(quickEntryText.trim())} className="flex-1 bg-[var(--green)] text-white font-extrabold py-3 rounded-2xl disabled:opacity-50">Aplicar</button></div>
-        <p className="text-[11px] text-[var(--muted)] mt-3">Se o microfone não funcionar no seu navegador, use o campo de texto — faz a mesma coisa.</p>
-      </div>
-    </div>}
-    {authUser && productItem && <div className="fixed inset-0 z-[65] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`Ficha — ${productItem.name}`}>
-      <div className="w-full sm:max-w-[520px] max-h-[88dvh] overflow-y-auto card p-5 sheet rounded-b-none sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold tracking-wide uppercase text-[var(--muted)]">Ficha do produto</p><h2 className="font-extrabold text-[22px] leading-tight mt-1 [overflow-wrap:anywhere]">{productItem.name}</h2></div><button onClick={()=>setProductItem(null)} aria-label="Fechar ficha" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
-        {(()=>{ const ref = checklistItems.find(r=>r.value?.name===productItem.name || r.value?.itemId===productItem.id)?.value; return ref?.photo && typeof ref.photo==="string" && ref.photo.startsWith("data:image/") ? <img src={ref.photo} alt={`Referência de ${productItem.name}`} className="w-full max-h-[220px] object-contain rounded-2xl bg-[var(--surface-inset)] mt-3" /> : null; })()}
-        <div className="grid grid-cols-2 gap-2 mt-4 text-[13px]"><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase text-[var(--muted)]">A produzir</span><b className="[overflow-wrap:anywhere]">{productItem.target}</b></div><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase text-[var(--muted)]">Frequência</span><b>{productItem.freq}</b></div></div>
-        <p className="text-[13px] text-[var(--muted)] mt-3">Seção: <b>{displaySectionTitle(productItem.section)}</b></p>
-        {productItem.detail && <p className="text-[14px] mt-2 leading-relaxed">{productItem.detail}</p>}
-        {instructions.find(i=>i.value.itemId===productItem.id)?.value?.text && <p className="mt-3 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed">📋 {instructions.find(i=>i.value.itemId===productItem.id)!.value.text}</p>}
-        {(()=>{ const s=suggestedFor(productItem); return s ? <p className="mt-3 text-[13px] font-bold text-[var(--muted)]">📈 Sugestão do dia: {s.value} un. ({s.days} dias iguais)</p> : null; })()}
-        {(()=>{ const y=addDays(date,-1); const ye=entries[`${selected}|${y}|${productItem.id}`]?.value; return <p className="mt-2 text-[13px] text-[var(--muted)]">Ontem: <b>{ye?.status||"sem registro"}</b>{ye?.feito?` · ${ye.feito} un.`:""}</p>; })()}
-        <div className="mt-3"><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Colegas que fazem este item</p><div className="flex flex-wrap gap-2 mt-2">{Object.keys(byProfile).filter(p=>p!==selected && p!=="Gerência" && (byProfile[p]||[]).some(i=>i.id===productItem.id)).map(p=><span key={p} className="chip">{p} · {entries[`${p}|${date}|${productItem.id}`]?.value.status||"—"}</span>)}</div></div>
-        <div className="flex flex-wrap gap-2 mt-5"><button disabled={saving||readOnly} onClick={()=>{ void setStatus(productItem,"Feito"); setProductItem(null); }} className="flex-1 bg-[var(--green)] text-white font-extrabold py-3.5 rounded-2xl">Feito</button><button disabled={saving||readOnly} onClick={()=>{ void setStatus(productItem,"Não feito"); setProductItem(null); }} className="flex-1 bg-[var(--danger)] text-white font-extrabold py-3.5 rounded-2xl">Não feito</button><button onClick={()=>setProductItem(null)} className="w-full bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Fechar</button></div>
-      </div>
-    </div>}
-    {stationQrOpen && <div className="fixed inset-0 z-[65] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label={`QR — ${stationQrInfo.label}`}>
-      <div className="w-full sm:max-w-[420px] card p-5 sheet rounded-b-none sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">QR por estação</p><h2 className="font-extrabold text-[20px] mt-1">{stationQrInfo.label}</h2></div><button onClick={()=>setStationQrOpen(false)} aria-label="Fechar QR" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
-        <p className="text-[13px] text-[var(--muted)] mt-2 leading-relaxed">Imprima ou cole na estação. Ao escanear, o app abre com o login dessa pessoa já preenchido.</p>
-        <div className="bg-white rounded-2xl p-3 mt-4 mx-auto w-fit"><canvas ref={stationQrCanvasRef} className="w-[240px] h-[240px] max-w-full block" aria-label="QR code da estação" /></div>
-        <p className="text-[11px] text-[var(--muted)] mt-2 [overflow-wrap:anywhere]">{stationQrInfo.url}</p>
-        <button onClick={()=>setStationQrOpen(false)} className="w-full mt-4 bg-[var(--primary)] text-white font-extrabold py-3.5 rounded-2xl">Fechar</button>
-      </div>
-    </div>}
+    <QrModal open={qrOpen} title="QR do Dojo" label="Dojo Checklist" description="Aponte a câmera para abrir o Dojo" url={appLink} canvasRef={qrCanvasRef} onClose={()=>setQrOpen(false)} />
+    <SignatureModal open={signatureOpen} label={selected||""} canvasRef={signatureCanvasRef} onDown={sigDown} onMove={sigMove} onUp={sigUp} onClear={clearSignature} onSave={()=>void saveSignature()} onClose={()=>setSignatureOpen(false)} />
+    <PhotoViewerModal viewer={photoViewer} onClose={()=>setPhotoViewer(null)} />
+    <VoiceModal open={!!(authUser&&quickEntryOpen)} listening={listening} speechAvailable={typeof window!=="undefined" && !!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition} text={quickEntryText} onText={setQuickEntryText} onStart={startVoice} onApply={()=>void handleVoice(quickEntryText.trim())} onClose={()=>{setQuickEntryOpen(false);setListening(false);}} />
+    {authUser && productItem && <ProductSheet
+      item={productItem}
+      photo={checklistItems.find(r=>r.value?.name===productItem.name || r.value?.itemId===productItem.id)?.value?.photo}
+      instruction={instructions.find(i=>i.value.itemId===productItem.id)?.value?.text}
+      suggestion={suggestedFor(productItem)}
+      section={displaySectionTitle(productItem.section)}
+      yesterday={(()=>{ const y=addDays(date,-1); const ye=entries[`${selected}|${y}|${productItem.id}`]?.value; return `${ye?.status||"sem registro"}${ye?.feito?` · ${ye.feito} un.`:""}`; })()}
+      colleagues={Object.keys(byProfile).filter(p=>p!==selected && p!=="Gerência" && (byProfile[p]||[]).some(i=>i.id===productItem.id)).map(p=>({name:p,status:entries[`${p}|${date}|${productItem.id}`]?.value.status||"—"}))}
+      saving={saving}
+      readOnly={readOnly}
+      onStatus={st=>{ void setStatus(productItem,st); setProductItem(null); }}
+      onClose={()=>setProductItem(null)}
+    />}
+    <QrModal open={stationQrOpen} title="QR por estação" label={stationQrInfo.label} description="Imprima ou cole na estação. Ao escanear, o app abre com o login dessa pessoa já preenchido." url={stationQrInfo.url} canvasRef={stationQrCanvasRef} onClose={()=>setStationQrOpen(false)} />
     {authUser && toast && <div className="fixed inset-x-0 z-[70] px-3 pointer-events-none" style={{bottom:"calc(172px + var(--safe-area-inset-bottom))"}}><div className="toast pointer-events-auto max-w-[440px] mx-auto" role="status"><Check size={17} className="shrink-0"/><span className="min-w-0 flex-1">{toast.text}</span>{toast.undo && <button onClick={()=>{toast.undo?.();setToast(null);}} className="shrink-0 font-extrabold underline">Desfazer</button>}<button onClick={()=>setToast(null)} aria-label="Fechar aviso" className="shrink-0 opacity-60"><X size={15}/></button></div></div>}
   </div>;
 }
