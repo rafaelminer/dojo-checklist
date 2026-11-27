@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/daily", "schedule": "0 12 * * *" },
-    { "path": "/api/daily?modo=resumo", "schedule": "0 1 * * *" }
+    { "path": "/api/daily?modo=resumo", "schedule": "0 1 * * *" },
+    { "path": "/api/cleanup", "schedule": "0 3 * * *" }
   ]
 }
