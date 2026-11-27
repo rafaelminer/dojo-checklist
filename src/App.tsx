@@ -401,6 +401,9 @@ export default function App(){
   const [questions,setQuestions]=useState<{id:string,value:QuestionRecord}[]>([]);
   const [qualityAnswers,setQualityAnswers]=useState<{id:string,value:QualityAnswerRecord}[]>([]);
   const [qualityDraft,setQualityDraft]=useState<Record<string,{verdict?:string;note?:string;photo?:string;temperature?:string}>>({});
+  const [historyDate,setHistoryDate]=useState(today());
+  const [historyMonth,setHistoryMonth]=useState(today().slice(0,7));
+  const [consolidated,setConsolidated]=useState<{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}|null>(null);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
   const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
@@ -1060,6 +1063,48 @@ export default function App(){
     downloadReport(text); setMsg("Relatório baixado — compartilhe pelo seu app de mensagens.");
   }
 
+  function buildConsolidated(){
+    const out:{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}={destaques:[],inconsistencias:[],riscos:[],oportunidades:[]};
+    const lastDays = Array.from({length:7},(_,i)=>addDays(date,-i));
+    const perfect = staffProfiles.filter(p=>lastDays.every(d=>{ const list=byProfile[p]||[]; if(!list.length) return false; const f=list.filter(i=>entries[`${p}|${d}|${i.id}`]?.value.status==="Feito").length; return f===list.length; }));
+    if(perfect.length) out.destaques.push(`${perfect.join(", ")} com 100% nos últimos 7 dias.`);
+    const failCount = new Map<string,number>();
+    lastDays.forEach(d=>Object.values(entries).forEach(r=>{ if(r.value.date===d && r.value.status==="Não feito") failCount.set(r.value.itemId,(failCount.get(r.value.itemId)||0)+1); }));
+    Array.from(failCount.entries()).filter(([,n])=>n>=2).slice(0,5).forEach(([id,n])=>{ const name=ALL_ITEMS.find(i=>i.id===id)?.name||id; out.inconsistencias.push(`${name} marcado como Não feito ${n}x em 7 dias.`); });
+    const tempRows = Object.values(temps).filter(r=>r.value.date===date);
+    tempRows.forEach(r=>{ const f=parseTempValue(r.value.fria), g=parseTempValue(r.value.freezer); if((f!==null&&(f<friaLim.min||f>friaLim.max))||(g!==null&&(g<freezerLim.min||g>freezerLim.max))) out.riscos.push(`Temperatura fora da faixa registrada por ${r.value.profile}: câmara ${r.value.fria||"—"} °C / freezer ${r.value.freezer||"—"} °C.`); });
+    if(expiryAlerts.length) out.riscos.push(`${expiryAlerts.length} produto(s) vencido(s) ou vencendo em até 3 dias.`);
+    if(pendingPlans.length>=3) out.riscos.push(`${pendingPlans.length} planos de ação pendentes.`);
+    const planCount = new Map<string,number>();
+    Object.values(actionPlans).forEach(r=>planCount.set(r.value.itemName,(planCount.get(r.value.itemName)||0)+1));
+    Array.from(planCount.entries()).filter(([,n])=>n>=2).slice(0,4).forEach(([name,n])=>out.oportunidades.push(`Plano de ação recorrente: ${name} (${n}x) — revisar processo.`));
+    if(openShortages.length>=2) out.oportunidades.push(`${openShortages.length} faltas em aberto hoje — revisar reposição.`);
+    if(!out.destaques.length && !out.inconsistencias.length && !out.riscos.length && !out.oportunidades.length) out.destaques.push("Sem alertas nos últimos 7 dias — operação dentro do padrão.");
+    setConsolidated(out);
+  }
+  function whatsappAlert(){
+    const lines:string[]=[`⚠️ Dojo Checklist — ${fmtDate(date)}`];
+    const atrasadas=tasks.filter(t=>taskOverdue(t.value)).map(t=>`Tarefa atrasada: ${t.value.title} (${t.value.owner})`);
+    if(atrasadas.length) lines.push(...atrasadas);
+    if(pendingPlans.length) lines.push(`${pendingPlans.length} plano(s) de ação pendente(s).`);
+    if(expiryAlerts.length) lines.push(`${expiryAlerts.length} produto(s) com validade crítica.`);
+    if(anyTempOut) lines.push("Temperatura fora da faixa registrada hoje.");
+    const nao=Object.values(entries).filter(r=>r.value.date===date&&r.value.status==="Não feito").length;
+    if(nao) lines.push(`${nao} item(ns) marcado(s) como Não feito hoje.`);
+    if(lines.length===1) lines.push("Tudo em dia na operação hoje.");
+    const url=`https://api.whatsapp.com/send?text=${encodeURIComponent(lines.join("\n"))}`;
+    window.open(url,"_blank","noopener,noreferrer");
+    setMsg("Conversa do WhatsApp aberta com o alerta preenchido.");
+  }
+  function historyHas(d:string){
+    return Object.values(submissions).some(r=>r.value.date===d) || Object.values(entries).some(r=>r.value.date===d) || qualityAnswers.some(r=>r.value.date===d) || Object.values(temps).some(r=>r.value.date===d);
+  }
+  function shiftHistoryMonth(delta:number){
+    const [y,m]=historyMonth.split("-").map(Number);
+    const d=new Date(y,m-1+delta,1);
+    const p=(n:number)=>String(n).padStart(2,"0");
+    setHistoryMonth(`${d.getFullYear()}-${p(d.getMonth()+1)}`);
+  }
   function pendingDeps(itemId:string):Item[]{
     return (ITEM_DEPENDENCIES[itemId]||[])
       .filter(id=>entryFor(id).status!=="Feito")
@@ -2120,6 +2165,8 @@ export default function App(){
         <button onClick={exportReport} className="flex-1 min-w-[170px] bg-white text-black font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Download size={17}/> Exportar relatório do dia</button>
         <button onClick={()=>void shareReport()} className="flex-1 min-w-[170px] bg-[var(--surface-2)] border border-[var(--line)] text-[var(--ink)] font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Share2 size={17}/> Compartilhar relatório</button>
         <button onClick={()=>void exportPdf()} className="flex-1 min-w-[150px] bg-[var(--secondary-bg)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Download size={17}/> PDF</button>
+        <button onClick={whatsappAlert} className="flex-1 min-w-[170px] bg-[#25D366] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><MessageCircle size={17}/> Alerta no WhatsApp</button>
+        <button onClick={buildConsolidated} className="flex-1 min-w-[170px] bg-[var(--secondary-bg)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><Sparkles size={17}/> Parecer consolidado</button>
         <button onClick={()=>setWeeklySummaryOpen(!weeklySummaryOpen)} aria-expanded={weeklySummaryOpen} className="flex-1 min-w-[170px] bg-[var(--secondary-bg)] text-white font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2"><CalendarDays size={17}/> Resumo da Semana</button>
         {isManager && <button onClick={()=>setRankingOpen(!rankingOpen)} aria-expanded={rankingOpen} className="flex-1 min-w-[170px] bg-[#FFC107] text-black font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2">🏆 {rankingOpen ? "Ocultar Ranking da Semana" : "Ver Ranking da Semana"}</button>}
       </div>
@@ -2176,6 +2223,17 @@ export default function App(){
         <h3 className="font-extrabold text-[18px] flex items-center gap-2"><QrCode size={18} className="text-[var(--primary)]"/> QR por estação</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Gere um QR para cada estação e cole no posto: abre o app com o login da pessoa preenchido.</p>
         <div className="flex flex-wrap gap-2 mt-3">{staffProfiles.map(p=><button key={p} type="button" onClick={()=>openStationQr(p)} className="chip"><QrCode size={13}/>{p}</button>)}</div>
+      </section>
+      {consolidated && <section className="card p-5 mt-4" aria-label="Parecer consolidado">
+        <h3 className="font-extrabold text-[18px]">Parecer consolidado — últimos 7 dias</h3>
+        <div className="grid gap-3 mt-4 sm:grid-cols-2">{(["destaques","inconsistencias","riscos","oportunidades"] as const).map(k=>{ const titles={destaques:"✅ Destaques",inconsistencias:"🔁 Inconsistências",riscos:"⚠️ Riscos",oportunidades:"💡 Oportunidades"}; return <div key={k} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-[12px] font-extrabold uppercase text-[var(--muted)]">{titles[k]}</p><ul className="mt-2 space-y-1 text-[13px] leading-relaxed">{consolidated[k].length?consolidated[k].map((t,i)=><li key={i}>• {t}</li>):<li className="text-[var(--muted)]">Nada registrado.</li>}</ul></div>; })}</div>
+        <button onClick={()=>void shareReport()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Compartilhar parecer</button>
+      </section>}
+      <section className="card p-5 mt-4" aria-label="Histórico em calendário">
+        <h3 className="font-extrabold text-[18px]">Histórico em calendário</h3>
+        <div className="flex items-center justify-between gap-2 mt-3"><button onClick={()=>shiftHistoryMonth(-1)} className="chip">←</button><p className="font-bold text-[14px] capitalize">{new Date(`${historyMonth}-02T12:00:00`).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p><button onClick={()=>shiftHistoryMonth(1)} className="chip">→</button></div>
+        <div className="grid grid-cols-7 gap-1 mt-3">{["D","S","T","Q","Q","S","S"].map((d,i)=><span key={i} className="text-center text-[11px] font-bold text-[var(--muted)]">{d}</span>)}{(()=>{ const [y,m]=historyMonth.split("-").map(Number); const first=new Date(y,m-1,1).getDay(); const days=new Date(y,m,0).getDate(); return <>{Array.from({length:first},(_,i)=><span key={`b${i}`}/>)}{Array.from({length:days},(_,i)=>{ const day=i+1; const p=(n:number)=>String(n).padStart(2,"0"); const ds=`${historyMonth}-${p(day)}`; const has=historyHas(ds); return <button key={ds} onClick={()=>setHistoryDate(ds)} className={`aspect-square rounded-lg text-[12px] font-bold border ${historyDate===ds?"bg-[var(--primary)] text-white border-[var(--primary)]":has?"bg-[var(--surface-2)] text-[var(--ink)] border-[var(--primary)]":"bg-[var(--surface-inset)] text-[var(--muted)] border-[var(--line)]"}`}>{day}</button>; })}</>; })()}</div>
+        {(()=>{ const subs=Object.values(submissions).filter(r=>r.value.date===historyDate); const ent=Object.values(entries).filter(r=>r.value.date===historyDate); const qa=qualityAnswers.filter(r=>r.value.date===historyDate); const tp=Object.values(temps).filter(r=>r.value.date===historyDate); const f=ent.filter(r=>r.value.status==="Feito").length; const n=ent.filter(r=>r.value.status==="Não feito").length; const photos=ent.filter(r=>!!r.value.photo).length; return <div className="mt-4 rounded-xl bg-[var(--surface-2)] p-3"><p className="font-extrabold text-[14px]">{fmtDate(historyDate)}</p><p className="text-[13px] text-[var(--muted)] mt-1">Checklists concluídos: {subs.length} · Itens: {f} feitos / {n} não feitos · Fotos: {photos} · Auditorias: {qa.length} · Temperaturas: {tp.length}</p>{subs.length>0 && <ul className="mt-2 space-y-1 text-[12px]">{subs.map(r=><li key={r.id}>• {r.value.profile} · {r.value.section} · {r.value.status}</li>)}</ul>}</div>; })()}
       </section>
       <section className="card p-5 mt-4" aria-label="Estoque e recebimento">
         <h3 className="font-extrabold text-[18px]">Estoque e recebimento</h3>
