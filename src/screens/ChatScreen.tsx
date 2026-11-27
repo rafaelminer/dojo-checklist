@@ -1,7 +1,8 @@
 // @ts-nocheck - tela extraída com props dinâmicas do App
 import { ChevronLeft, Lock, Mic, ThumbsDown, ThumbsUp, Users } from "lucide-react";
 
-export default function ChatScreen(p: any) {
+export default function ChatScreen(props: any) {
+  const p = props.p;
   return <>
     {p.tab==="chat" && !p.conversation && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[140px] p.tab-transition">
       <div className="mt-5 overflow-hidden rounded-[20px] border border-[var(--line)]">
