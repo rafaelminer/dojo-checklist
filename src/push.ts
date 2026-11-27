@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, getAuthToken } from "./api";
 
 const PUBLIC_KEY = String(import.meta.env.VITE_VAPID_PUBLIC_KEY || "");
 const COLLECTION = "dojo_push_subscriptions";
@@ -76,7 +76,10 @@ export async function notifyMessage(payload: { profile: string; sender: string; 
   try {
     await fetch("/api/push", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
+      },
       body: JSON.stringify(payload),
     });
   } catch {
