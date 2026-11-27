@@ -2089,7 +2089,7 @@ export default function App(){
   },[selected,date,entries,unitFilter]);
   function sharedProductionSection(){
     if(!sharedProduction.length) return null;
-    return <section className="card p-5 mt-4" aria-label="Produção compartilhada">
+    return <section className="card p-5 mt-4" aria-label="Produção compartilhada" data-group="conferencia">
       <h3 className="font-extrabold text-[18px]">Produção compartilhada</h3>
       <p className="text-[13px] text-[var(--muted)] mt-1">Quem faz os mesmos itens que {selected} — progresso de hoje.</p>
       <ul className="mt-3 space-y-3">{sharedProduction.map(s=><li key={s.person} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0">
@@ -2241,7 +2241,7 @@ export default function App(){
       {isManager && rankingOpen && <section className="card p-5 mt-4" aria-label="Ranking da Semana"><h3 className="font-extrabold text-[18px]">🏆 Ranking da Semana</h3><p className="text-[13px] text-[var(--muted)] mt-1">Segunda a domingo · {fmtDate(weeklyRanking.weekStart)} a {fmtDate(weeklyRanking.weekEnd)} · % = Feito / Total da semana</p>{rankingRows.filter(r=>r.total>0).length===0 ? <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Nenhum checklist concluído nesta semana ainda.</p> : <><div className="grid grid-cols-3 gap-2 mt-4">{rankingRows.slice(0,3).map((r,i)=>{ const medal = i===0 ? "🥇" : i===1 ? "🥈" : "🥉"; return <div key={r.person} className="rounded-2xl bg-[var(--surface-2)] p-3 text-center"><div className="text-[26px] leading-none">{medal}</div><p className="font-extrabold text-[15px] mt-2 [overflow-wrap:anywhere]">{r.person}</p><p className="font-extrabold text-[20px] mt-1" style={{color:complianceColor(r.pct)}}>{r.pct}%</p><p className="text-[12px] text-[var(--muted)] mt-1">{r.checklists} checklist{r.checklists===1 ? "" : "s"}</p></div>; })}</div><ol className="mt-5 space-y-4">{rankingRows.map((r,i)=><li key={r.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><div className="flex justify-between gap-2 items-baseline"><span className="font-bold text-[16px] [overflow-wrap:anywhere]">{i+1}º {r.person}</span><span className="text-[14px] font-extrabold shrink-0" style={{color:complianceColor(r.pct)}}>{r.pct}% • {r.checklists} checklist{r.checklists===1 ? "" : "s"}</span></div><div className="h-1.5 rounded-full bg-[var(--secondary-bg)] mt-2 overflow-hidden"><div className="h-full rounded-full" style={{width:`${r.pct}%`,background:complianceColor(r.pct)}} /></div><p className="text-[12px] text-[var(--muted)] mt-1.5">{r.feitos} feitos · {r.naoFeitos} não feitos · {r.total} itens marcados</p></li>)}</ol></>}</section>}
       {weeklySummaryOpen && <section className="card p-5 mt-4" aria-label="Resumo da Semana"><h3 className="font-extrabold text-[18px]">Resumo da Semana</h3><p className="text-[13px] text-[var(--muted)] mt-1">Segunda a domingo · {fmtDate(weeklySummary.weekStart)} a {fmtDate(weeklySummary.weekEnd)}</p><ul className="mt-4 space-y-3 text-[14px] leading-relaxed"><li><b>Total de checklists concluídos na semana:</b> {weeklySummary.totalConcluded}</li><li><b>% Conformidade média da semana:</b> <span style={{color:complianceColor(weeklySummary.avgCompliance)}}>{weeklySummary.avgCompliance}%</span> <span className="text-[var(--muted)]">({weeklySummary.feitos} feitos · {weeklySummary.naoFeitos} não feitos)</span></li><li><b>Top 3 itens mais marcados como Não feito na semana:</b>{weeklySummary.top3.length===0 ? <span className="text-[var(--muted)]"> Nenhum item marcado como Não feito na semana.</span> : <ol className="mt-1 space-y-1 list-decimal pl-5">{weeklySummary.top3.map((t,i)=><li key={`${t.name}-${i}`} className="[overflow-wrap:anywhere]">{t.name} — {t.count}x</li>)}</ol>}</li><li><b>Pessoas com 100% na semana:</b>{weeklySummary.perfectPeople.length===0 ? <span className="text-[var(--muted)]"> Ninguém com 100% na semana.</span> : <span> {weeklySummary.perfectPeople.join(", ")}</span>}</li><li><b>Planos de Ação:</b> {weeklySummary.plansResolved} resolvidos / {weeklySummary.plansPending} pendentes</li></ul><button onClick={()=>setWeeklySummaryOpen(false)} className="mt-4 bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-bold rounded-xl px-4 py-3 text-[13px]">Fechar resumo</button></section>}
       {aiInsights && <section className="card p-5 mt-4"><h3 className="font-extrabold text-[17px] flex items-center gap-2"><Sparkles size={18} className="text-[var(--primary)]"/> Revisão da IA — {fmtDate(date)}</h3><ul className="mt-3 space-y-2">{aiInsights.map((t,i)=><li key={i} className="text-[14px] leading-relaxed [overflow-wrap:anywhere]">• {t}</li>)}</ul></section>}
-      {isManager && <section id="dash-qualidade" className="card p-5 mt-4" aria-label="Validade e vencimento">
+      {isManager && <section id="dash-qualidade" className="card p-5 mt-4" aria-label="Validade e vencimento" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Validade / Vencimento</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Produtos vencidos ou vencendo em até 3 dias.</p>
         {expiryAlerts.length===0 ? <p className="text-sm text-[var(--muted)] mt-3 leading-relaxed">Nenhum produto vencido ou vencendo em 3 dias.</p> : <ul className="mt-4 space-y-3">{expiryAlerts.map((v,i)=>{
@@ -2254,7 +2254,7 @@ export default function App(){
           </li>;
         })}</ul>}
       </section>}
-      <section className="card p-5 mt-4">
+      <section className="card p-5 mt-4" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Por pessoa — hoje</h3>
         <div className="flex flex-wrap gap-2 mt-3" role="group" aria-label="Filtrar por pessoa">{OVERVIEW_FILTER_PEOPLE.map(p=><button key={p} type="button" onClick={()=>setOverviewPerson(p)} className={`chip ${overviewPerson===p?"active":""}`}>{p}</button>)}</div>
         <ul className="mt-4 space-y-4">{overviewFilteredPeople.filter(p=>unitFilter==="Todas"||unitOf(p.person)===unitFilter).map(p=><li key={p.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
@@ -2319,7 +2319,7 @@ export default function App(){
         <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Recebimentos de hoje</p>
         <ul className="mt-2 space-y-2">{receivings.filter(r=>r.value.date===date).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum recebimento hoje.</li> : receivings.filter(r=>r.value.date===date).map(r=><li key={r.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{r.value.item} · {r.value.supplier||"sem fornecedor"}</p><p className="text-[12px] text-[var(--muted)]">Nota {r.value.invoice||"—"} · esperado {r.value.expectedQty||"—"} · recebido {r.value.receivedQty||"—"} · <b className={r.value.status==="Divergente"?"text-[var(--danger-text)]":"text-[var(--success-text)]"}>{r.value.status}</b></p></li>)}</ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Temperatura e limites">
+      <section className="card p-5 mt-4" aria-label="Temperatura e limites" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Temperatura — limites e histórico</h3>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">{(["fria","freezer"] as const).map(k=><div key={k} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-[13px] font-extrabold capitalize">{k==="fria"?"Câmara fria":"Freezer"}</p><div className="flex gap-2 mt-2"><input type="number" value={auxForm[`tempMin-${k}`] ?? String(tempLimitFor(k)?.min ?? "")} onChange={e=>setAuxForm(p=>({...p,[`tempMin-${k}`]:e.target.value}))} placeholder="Mín." className="field !mt-0" aria-label={`Mínimo ${k}`} /><input type="number" value={auxForm[`tempMax-${k}`] ?? String(tempLimitFor(k)?.max ?? "")} onChange={e=>setAuxForm(p=>({...p,[`tempMax-${k}`]:e.target.value}))} placeholder="Máx." className="field !mt-0" aria-label={`Máximo ${k}`} /></div><button onClick={()=>void saveTempLimit(k)} className="mt-2 bg-[var(--secondary-bg)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Salvar limite</button></div>)}</div>
         <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Últimos 7 dias — {selected}</p>
@@ -2394,7 +2394,7 @@ export default function App(){
           </li>;
         })}</ul>}
       </section>
-      <section className="card p-5 mt-4">
+      <section className="card p-5 mt-4" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Planos de Ação Pendentes: {pendingPlans.length}</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Toda não-conformidade vira um plano de ação automático. Corrigir o item resolve o plano.</p>
         {pendingPlans.length===0 ? <p className="text-sm text-[var(--muted)] mt-3 leading-relaxed">Nenhum plano de ação pendente.</p> : <ul className="mt-4 space-y-4">{pendingPlans.map(p=>{
@@ -2420,11 +2420,11 @@ export default function App(){
           <button onClick={()=>resolveShortage(s)} className="mt-3 bg-[var(--green)] text-white font-extrabold text-[13px] px-4 py-3 rounded-xl">Comprado / Resolvido</button>
         </li>)}</ul>}
       </section>}
-      {isManager && <section className="card p-5 mt-4">
+      {isManager && <section className="card p-5 mt-4" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Horário do turno</h3>
         <ul className="mt-4 space-y-4">{people.map(p=>{ const sh = shiftFor(p,date); return <li key={p} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><p className="font-bold text-[16px] [overflow-wrap:anywhere]">{p} · {stationMap[p]||""}</p><p className="text-[13px] text-[var(--muted)] mt-1">{!sh ? "Não iniciado" : sh.finishedAt ? `Iniciado ${sh.startedAt} • Concluído ${sh.finishedAt}` : `Iniciado ${sh.startedAt} • Em andamento`}</p>{sh && <p className="text-[12px] text-[var(--muted)]">por {sh.startedBy}{sh.finishedAt && sh.finishedBy ? ` • concluído por ${sh.finishedBy}` : ""}</p>}</li>; })}</ul>
       </section>}
-      {isManager && <section className="card p-5 mt-4">
+      {isManager && <section className="card p-5 mt-4" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Atrasados hoje: {delayedList.list.length}</h3>
         {delayedList.list.length===0 ? <p className="text-sm text-[var(--muted)] mt-3 leading-relaxed">Ninguém atrasado no turno atual.</p> : <ul className="mt-4 space-y-4">{delayedList.list.map(p=><li key={p.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
           <p className="font-bold text-[16px] [overflow-wrap:anywhere]">{p.person}</p>
@@ -2432,7 +2432,7 @@ export default function App(){
           <button onClick={()=>{setSelected(p.person); setTab("chat"); setConversation(p.person);}} className="mt-3 bg-white text-black font-extrabold text-[13px] px-4 py-3 rounded-xl">Ver conversa →</button>
         </li>)}</ul>}
       </section>}
-      <section className="card p-4 mt-4">
+      <section className="card p-4 mt-4" data-group="qualidade">
         <button type="button" onClick={()=>setShowPrevious(!showPrevious)} aria-expanded={showPrevious} className="text-[13px] font-bold text-[var(--muted)]">{showPrevious ? "Ocultar anteriores ▲" : "Ver anteriores ▼"}</button>
         {showPrevious && <div className="mt-3">
           <label className="block"><span className="text-[13px] font-bold">Buscar no histórico</span><input value={historySearch} onChange={e=>setHistorySearch(e.target.value)} placeholder="Ex.: Laís ou 24/11" className="field mt-2" aria-label="Buscar no histórico por nome ou data" /></label>
