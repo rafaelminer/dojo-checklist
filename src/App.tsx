@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
 import { api, flushQueue, getAuthToken, queueSize, setAuthToken } from "./api";
 import { supabaseCreateUser, supabaseSignIn } from "./auth";
+import { comparePhotos } from "./vision";
+import CameraGuide from "./components/CameraGuide";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 import QrModal from "./components/QrModal";
 import SignatureModal from "./components/SignatureModal";
@@ -181,6 +183,7 @@ export default function App(){
   const [signatures,setSignatures]=useState<{id:string;value:SignatureRecord}[]>([]);
   const [templates,setTemplates]=useState<{id:string;value:TemplateRecord}[]>([]);
   const [customItems,setCustomItems]=useState<{id:string;value:CustomItemsRecord}[]>([]);
+  const [cameraQuestion,setCameraQuestion]=useState<string|null>(null);
   const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const drawingRef=useRef(false);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
@@ -1730,7 +1733,11 @@ export default function App(){
       score = filled?10:0;
     }
     verdict = q.value.type==="check" ? verdict : score>=7.5?"Conforme":score>=5?"Parcial":"Não conforme";
-    const opinion = verdict==="Conforme"?"Dentro do padrão definido.":verdict==="Parcial"?"Atenção: verificar o ponto sinalizado.":"Fora do padrão: corrigir e reavaliar.";
+    let opinion = verdict==="Conforme"?"Dentro do padrão definido.":verdict==="Parcial"?"Atenção: verificar o ponto sinalizado.":"Fora do padrão: corrigir e reavaliar.";
+    if(q.value.type==="photo" && d.photo && q.value.referencePhoto){
+      const cmp = await comparePhotos(q.value.referencePhoto,d.photo);
+      score = cmp.score; verdict = cmp.verdict; opinion = cmp.opinion;
+    }
     const value:QualityAnswerRecord = { date, questionId:q.id, question:q.value.question, profile:selected||"", verdict, score, note:d.note||"", answer, opinion, photo:d.photo||"", temperature:d.temperature||"", time:nowTime() };
     try{
       await api("records.create",{collection:"dojo_quality_answers",value});
@@ -2321,7 +2328,7 @@ export default function App(){
           {q.value.type==="classificacao" && <div className="flex flex-wrap gap-2 mt-2">{[1,2,3,4,5].map(n=><button key={n} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:String(n)}}))} className={`chip ${d.answer===String(n)?"active":""}`}>{n}</button>)}</div>}
           {q.value.type==="data" && <input type="date" value={d.answer||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:e.target.value}}))} className="field mt-2" aria-label={`Data ${q.value.question}`} />}
           {q.value.type==="hora" && <input type="time" value={d.answer||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:e.target.value}}))} className="field mt-2" aria-label={`Hora ${q.value.question}`} />}
-          {q.value.type==="photo" && <div className="mt-2"><PhotoField value={d.photo||""} onChange={data=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],photo:data}}))} label="Foto da auditoria" /></div>}
+          {q.value.type==="photo" && <div className="mt-2"><PhotoField value={d.photo||""} onChange={data=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],photo:data}}))} label="Foto da auditoria" />{q.value.referencePhoto && <button type="button" onClick={()=>setCameraQuestion(q.id)} className="mt-2 w-full bg-[var(--secondary-bg)] text-white font-extrabold text-[12px] py-3 rounded-xl">📸 Abrir câmera com guia do padrão</button>}</div>}
           {q.value.type==="temperature" && <input type="number" inputMode="decimal" value={d.temperature||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],temperature:e.target.value}}))} placeholder="°C" className="field mt-2" aria-label={`Temperatura ${q.value.question}`} />}
           {q.value.type==="text" && <textarea value={d.note||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],note:e.target.value}}))} placeholder="Descreva o que foi conferido" className="field mt-2 min-h-[64px]" aria-label={`Observação ${q.value.question}`} />}
           {q.value.type!=="text" && <textarea value={d.note||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],note:e.target.value}}))} placeholder="Observação (opcional)" className="field mt-2 min-h-[56px]" aria-label={`Observação ${q.value.question}`} />}
@@ -2597,6 +2604,7 @@ export default function App(){
       onClose={()=>setProductItem(null)}
     />}
     <QrModal open={stationQrOpen} title="QR por estação" label={stationQrInfo.label} description="Imprima ou cole na estação. Ao escanear, o app abre com o login dessa pessoa já preenchido." url={stationQrInfo.url} canvasRef={stationQrCanvasRef} onClose={()=>setStationQrOpen(false)} />
+    {cameraQuestion && <CameraGuide reference={questions.find(q=>q.id===cameraQuestion)?.value.referencePhoto} onCapture={data=>setQualityDraft(p=>({...p,[cameraQuestion]:{...p[cameraQuestion],photo:data}}))} onClose={()=>setCameraQuestion(null)} />}
     {authUser && toast && <div className="fixed inset-x-0 z-[70] px-3 pointer-events-none" style={{bottom:"calc(172px + var(--safe-area-inset-bottom))"}}><div className="toast pointer-events-auto max-w-[440px] mx-auto" role="status"><Check size={17} className="shrink-0"/><span className="min-w-0 flex-1">{toast.text}</span>{toast.undo && <button onClick={()=>{toast.undo?.();setToast(null);}} className="shrink-0 font-extrabold underline">Desfazer</button>}<button onClick={()=>setToast(null)} aria-label="Fechar aviso" className="shrink-0 opacity-60"><X size={15}/></button></div></div>}
   </div>;
 }
