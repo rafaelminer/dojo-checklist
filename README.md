@@ -93,7 +93,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Onda 3:** botão “Alerta no WhatsApp” com texto preenchido (via `wa.me`, sem API paga); parecer consolidado com destaques/inconsistências/riscos/oportunidades; histórico em calendário com navegação por mês e resumo por dia.
 - **Onda 4 (parcial):** campo de unidade por funcionário com filtro no dashboard; assinatura desenhada na tela ao fechar o turno. PIN removido a pedido. Ainda pendentes: Supabase Auth/JWT e biblioteca de templates com IA.
 - **Varredura geral:** bugs corrigidos (parecer compartilhado, voz respeitando foto obrigatória, filtro de unidade ampliado, prazo em horário de Brasília, CSS órfão removido) e dashboard organizado em abas **Conferência / Equipe / Qualidade**.
-- **Organização do código:** tipos, constantes e catálogos de itens movidos para `src/data.ts`; `App.tsx` saiu de ~2.775 para ~2.566 linhas. Os modais e telas seguem no componente principal (próxima refatoração possível).
+- **Organização do código:** tipos, constantes e catálogos em `src/data.ts`; modais extraídos para `src/components/` (QR, assinatura, foto, voz e ficha do produto). `App.tsx` saiu de ~2.775 para ~2.430 linhas. Telas grandes (dashboard/checklist/chat) seguem no componente principal.
 
 ## Notificações push
 
