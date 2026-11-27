@@ -88,6 +88,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Limpeza:** busca ⌘K sem botão visível e banner inalcançável da gerência removidos; Módulos mostra só coleções úteis.
 - **ErrorBoundary:** erro de renderização mostra tela de recarga em vez de página em branco.
 - **Push:** inscrições inválidas (404/410/400) são removidas automaticamente.
+- **Onda 1 (referências Checa Aí / Chequei / OrganizaAí):** contagem de estoque com esperado × contado × diferença; recebimento de mercadorias item a item com status “Conferido/Divergente”; limites de temperatura configuráveis com alerta e histórico em gráfico; foto obrigatória em itens críticos; tarefas com dias da semana específicos.
 
 ## Notificações push
 
