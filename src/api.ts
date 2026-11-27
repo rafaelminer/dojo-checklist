@@ -2,6 +2,18 @@
 // Escritas que falham por rede ficam numa fila e são reenviadas quando a conexão volta.
 
 const QUEUE_KEY = "dojo_offline_queue";
+const TOKEN_KEY = "dojo_jwt";
+
+export function setAuthToken(token: string | null) {
+  try {
+    if (token) sessionStorage.setItem(TOKEN_KEY, token);
+    else sessionStorage.removeItem(TOKEN_KEY);
+  } catch {}
+}
+
+export function getAuthToken() {
+  try { return sessionStorage.getItem(TOKEN_KEY) || ""; } catch { return ""; }
+}
 type QueueItem = { action: string; args: any; ts: number };
 
 function readQueue(): QueueItem[] {
@@ -38,6 +50,7 @@ async function send(action: string, args: any) {
       headers: {
         "content-type": "application/json",
         "x-dojo-key": String(import.meta.env.VITE_DOJO_API_SECRET || ""),
+        ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
       },
       body: JSON.stringify({ action, args }),
     });

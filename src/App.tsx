@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, Check, ChevronLeft, ClipboardCheck, LayoutDashboard, MessageCircle, LogOut, Eye, EyeOff, ThumbsUp, ThumbsDown, QrCode, Download, Sparkles, Lock, Camera, Images, Trash2, Sun, Moon, X, Users, Bell, Mic, Share2 } from "lucide-react";
-import { api, flushQueue, queueSize } from "./api";
+import { api, flushQueue, queueSize, setAuthToken } from "./api";
+import { supabaseCreateUser, supabaseSignIn } from "./auth";
 import { enablePush, getPushStatus, notifyMessage, pushSupported } from "./push";
 import QrModal from "./components/QrModal";
 import SignatureModal from "./components/SignatureModal";
@@ -595,6 +596,7 @@ export default function App(){
     setLoginError(""); setPasswordInput("");
   }
   function handleLogout(){
+    setAuthToken(null);
     setAuthUser(null); setSelected(null); setConversation(null); setTab("checklist");
     setPasswordInput(""); setLoginError("");
     setDraft(""); setMsg("Você saiu. Faça login para ver seu checklist.");
@@ -610,6 +612,15 @@ export default function App(){
     if(!profile){ setLoginError("Login ou senha incorretos"); return; }
     const enteredPassword = passwordInput.trim().toLowerCase();
     if(!enteredPassword){ setLoginError("Digite sua senha."); return; }
+    try{
+      const jwt = await supabaseSignIn(loginKey, enteredPassword);
+      if(jwt){
+        setAuthToken(jwt);
+        setLoginError(""); setAttempts(prev=>({...prev,[loginKey]:0}));
+        enterApp(profile); setMsg(`Olá, ${profile}!`);
+        return;
+      }
+    }catch{ setAuthToken(null); }
     const cred = credentials.find(c=>normalizeLogin(c.value.login)===loginKey);
     const stored = String(cred?.value.password||"").trim();
     let ok = false;
@@ -1646,6 +1657,7 @@ export default function App(){
     try{
       if(editingRec) await api("records.replace",{collection:"dojo_credentials",id:editing!,value});
       else await api("records.create",{collection:"dojo_credentials",value,idempotency_key:`dojo-staff-${login}-${Date.now()}`});
+      try{ await supabaseCreateUser(login,password,String(import.meta.env.VITE_DOJO_API_SECRET||"")); }catch{}
       await reloadRecords(); setOfflineMode(false);
       resetStaffForm();
       setStaffMsg(`${name} salvo. Login: ${login} · senha: ${password}.`);
