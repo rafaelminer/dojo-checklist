@@ -24,12 +24,13 @@ export default async function handler(req, res) {
     const today = brazilDate(0);
     const yesterday = brazilDate(-1);
 
-    const [chats, credentials, catalog, entries, tasks] = await Promise.all([
+    const [chats, credentials, catalog, entries, tasks, submissions] = await Promise.all([
       listRecords("dojo_chat", 1000),
       listRecords("dojo_credentials", 500),
       listRecords("dojo_item_catalog", 500),
       listRecords("dojo_entries", 1000),
       listRecords("dojo_tasks", 500),
+      listRecords("dojo_submissions", 500),
     ]);
 
     const replaced = new Set(credentials.map((r) => r.value?.replacesProfile).filter(Boolean));
@@ -54,6 +55,21 @@ export default async function handler(req, res) {
     const has = (needle) => chats.some((r) => String(r.value?.text || "").includes(needle));
     let reminders = 0;
     let summaries = 0;
+
+    if (String(req.query?.modo || "") === "resumo") {
+      const marker = `📋 Resumo 22h — ${today}`;
+      if (!has(marker)) {
+        const subs = submissions.filter((r) => r.value?.date === today);
+        const feitos = Object.values(entries).filter((r) => r.value?.date === today && r.value.status === "Feito").length;
+        const nao = Object.values(entries).filter((r) => r.value?.date === today && r.value.status === "Não feito").length;
+        const text = `${marker}\nChecklists concluídos: ${subs.length}\nItens: ${feitos} feitos · ${nao} não feitos.\nEquipe: ${people.join(", ")}.`;
+        await sendChat("Gerência", text);
+        for (const g of GROUPS) await sendChat(g, text);
+        summaries = 1;
+      }
+      res.status(200).json({ today, summaries, mode: "resumo" });
+      return;
+    }
 
     const reminderMarker = `🔔 Lembrete diário — ${today}`;
     if (!has(reminderMarker)) {
