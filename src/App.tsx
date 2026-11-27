@@ -1726,9 +1726,11 @@ export default function App(){
     let verdict:QualityAnswerRecord["verdict"]="Conforme";
     let score=10;
     const answer = d.answer||"";
-    if(q.value.type==="check"){
+    if(q.value.type==="check"||q.value.type==="foto_veredito"||q.value.type==="texto_veredito"){
       verdict = (d.verdict as QualityAnswerRecord["verdict"])||"Conforme";
       score = verdict==="Conforme"?10:verdict==="Parcial"?6:0;
+      if(q.value.type==="foto_veredito" && !d.photo){ score=0; verdict="Não conforme"; }
+      if(q.value.type==="texto_veredito" && !d.note?.trim()){ score=0; verdict="Não conforme"; }
     }else if(q.value.type==="sim_nao"){
       score = answer==="Sim"?10:answer==="Não"?0:0;
     }else if(q.value.type==="multipla"){
@@ -1741,7 +1743,8 @@ export default function App(){
       const filled = q.value.type==="photo" ? !!d.photo : q.value.type==="temperature" ? !!d.temperature : !!answer.trim() || !!d.note?.trim();
       score = filled?10:0;
     }
-    verdict = q.value.type==="check" ? verdict : score>=7.5?"Conforme":score>=5?"Parcial":"Não conforme";
+    const keepsVerdict = q.value.type==="check"||q.value.type==="foto_veredito"||q.value.type==="texto_veredito";
+    verdict = keepsVerdict ? verdict : score>=7.5?"Conforme":score>=5?"Parcial":"Não conforme";
     let opinion = verdict==="Conforme"?"Dentro do padrão definido.":verdict==="Parcial"?"Atenção: verificar o ponto sinalizado.":"Fora do padrão: corrigir e reavaliar.";
     if(q.value.type==="photo" && d.photo && q.value.referencePhoto){
       const cmp = await comparePhotos(q.value.referencePhoto,d.photo);
@@ -2188,7 +2191,7 @@ export default function App(){
         <div className="grid gap-3 mt-4 sm:grid-cols-2">
           <label className="block sm:col-span-2"><span className="text-[13px] font-bold">Pergunta</span><input value={auxForm.qText||""} onChange={e=>setAuxForm(p=>({...p,qText:e.target.value}))} placeholder="Ex.: Bancada limpa e sem resíduos" className="field mt-1.5" aria-label="Pergunta da auditoria" /></label>
           <label className="block"><span className="text-[13px] font-bold">Seção</span><select value={auxForm.qSection||"Produção"} onChange={e=>setAuxForm(p=>({...p,qSection:e.target.value}))} className="field mt-1.5" aria-label="Seção da pergunta">{SECTIONS.map(s=><option key={s}>{s}</option>)}</select></label>
-          <label className="block"><span className="text-[13px] font-bold">Tipo</span><select value={auxForm.qType||"check"} onChange={e=>setAuxForm(p=>({...p,qType:e.target.value}))} className="field mt-1.5" aria-label="Tipo de pergunta"><option value="check">Conforme / Parcial / Não conforme</option><option value="sim_nao">Sim / Não</option><option value="multipla">Múltipla escolha</option><option value="numero">Número</option><option value="classificacao">Nota 1–5</option><option value="data">Data</option><option value="hora">Hora</option><option value="photo">Foto</option><option value="text">Observação</option><option value="temperature">Temperatura</option></select></label>
+          <label className="block"><span className="text-[13px] font-bold">Tipo</span><select value={auxForm.qType||"check"} onChange={e=>setAuxForm(p=>({...p,qType:e.target.value}))} className="field mt-1.5" aria-label="Tipo de pergunta"><option value="check">Conforme / Parcial / Não conforme</option><option value="sim_nao">Sim / Não</option><option value="multipla">Múltipla escolha</option><option value="numero">Número</option><option value="classificacao">Nota 1–5</option><option value="data">Data</option><option value="hora">Hora</option><option value="photo">Foto</option><option value="text">Observação</option><option value="temperature">Temperatura</option><option value="foto_veredito">Foto + veredito</option><option value="texto_veredito">Texto + veredito</option></select></label>
           <label className="block sm:col-span-2"><span className="text-[13px] font-bold">Opções / resposta correta <span className="font-normal text-[var(--muted)]">(múltipla escolha: separadas por "|"; depois marque a correta)</span></span><div className="flex gap-2 mt-1.5"><input value={auxForm.qOptions||""} onChange={e=>setAuxForm(p=>({...p,qOptions:e.target.value}))} placeholder="Opção A | Opção B | Opção C" className="field !mt-0" aria-label="Opções da pergunta" /><input value={auxForm.qCorrect||""} onChange={e=>setAuxForm(p=>({...p,qCorrect:e.target.value}))} placeholder="Correta" className="field !mt-0" aria-label="Resposta correta" /></div></label>
           <label className="block"><span className="text-[13px] font-bold">Peso (1–5)</span><input type="number" min={1} max={5} value={auxForm.qWeight||"3"} onChange={e=>setAuxForm(p=>({...p,qWeight:e.target.value}))} className="field mt-1.5" aria-label="Peso da pergunta" /></label>
           <label className="block"><span className="text-[13px] font-bold">Nota mínima</span><input type="number" step="0.5" value={auxForm.qMin||"7.5"} onChange={e=>setAuxForm(p=>({...p,qMin:e.target.value}))} className="field mt-1.5" aria-label="Nota mínima" /></label>
@@ -2337,6 +2340,8 @@ export default function App(){
         {questions.filter(q=>activeSections.includes(q.value.section as Section)).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma pergunta de auditoria para o seu posto.</p> : <ul className="mt-3 space-y-4">{questions.filter(q=>activeSections.includes(q.value.section as Section)).map(q=>{ const d=qualityDraft[q.id]||{}; const answered=qualityAnswers.some(a=>a.value.date===date&&a.value.questionId===q.id&&a.value.profile===authUser); return <li key={q.id} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><p className="font-bold text-[15px]">{q.value.question}</p>{q.value.hint && <p className="text-[12px] text-[var(--muted)] mt-0.5">{q.value.hint}</p>}
           {q.value.referencePhoto && <div className="mt-2"><p className="text-[11px] font-bold text-[var(--muted)]">Padrão de referência</p><img src={q.value.referencePhoto} alt="Referência" className="w-24 h-24 object-cover rounded-xl border border-[var(--line)] mt-1" /></div>}
           {q.value.type==="check" && <div className="flex flex-wrap gap-2 mt-2">{(["Conforme","Parcial","Não conforme"] as const).map(v=><button key={v} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],verdict:v}}))} className={`chip ${d.verdict===v?"active":""}`}>{v}</button>)}</div>}
+          {(q.value.type==="foto_veredito"||q.value.type==="texto_veredito") && <div className="flex flex-wrap gap-2 mt-2">{(["Conforme","Parcial","Não conforme"] as const).map(v=><button key={v} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],verdict:v}}))} className={`chip ${d.verdict===v?"active":""}`}>{v}</button>)}</div>}
+          {q.value.type==="foto_veredito" && <div className="mt-2"><PhotoField value={d.photo||""} onChange={data=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],photo:data}}))} label="Foto da auditoria" />{q.value.referencePhoto && <button type="button" onClick={()=>setCameraQuestion(q.id)} className="mt-2 w-full bg-[var(--secondary-bg)] text-white font-extrabold text-[12px] py-3 rounded-xl">📸 Abrir câmera com guia do padrão</button>}</div>}
           {q.value.type==="sim_nao" && <div className="flex gap-2 mt-2">{(["Sim","Não"] as const).map(v=><button key={v} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:v}}))} className={`chip ${d.answer===v?"active":""}`}>{v}</button>)}</div>}
           {q.value.type==="multipla" && <div className="flex flex-wrap gap-2 mt-2">{String(q.value.options||"").split("|").map(s=>s.trim()).filter(Boolean).map(o=><button key={o} type="button" onClick={()=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:o}}))} className={`chip ${d.answer===o?"active":""}`}>{o}</button>)}</div>}
           {q.value.type==="numero" && <input type="number" inputMode="decimal" value={d.answer||""} onChange={e=>setQualityDraft(p=>({...p,[q.id]:{...p[q.id],answer:e.target.value}}))} placeholder="Número" className="field mt-2" aria-label={`Número ${q.value.question}`} />}
