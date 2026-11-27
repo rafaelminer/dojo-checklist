@@ -96,6 +96,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **Varredura geral:** bugs corrigidos (parecer compartilhado, voz respeitando foto obrigatória, filtro de unidade ampliado, prazo em horário de Brasília, CSS órfão removido) e dashboard organizado em abas **Conferência / Equipe / Qualidade**.
 - **Privacidade e idioma:** política LGPD em `docs/LGPD.md` e página pública em `/privacidade.html` (linkada no login); alternador **PT/EN** com tradução de 239 frases da interface, placeholders e rótulos (`src/phrases-en.ts`, `src/i18n.ts`).
 - **Organização do checklist:** seções recolhíveis com “Abrir todas / Fechar todas” e cabeçalho com menos botões no celular.
+- **Code splitting:** Chat, Dashboard e Checklist carregados sob demanda (`React.lazy`); bundle principal caiu de ~512 kB para ~390 kB. QR do Dojo removido (resta QR por estação); “Revisão da IA” renomeada para “Parecer automático”.
 - **Retenção automática:** cron diário às 03:00 (Brasília) remove registros operacionais com mais de `RETENTION_DAYS` dias (padrão 365, configurável na Vercel). Cadastros, modelos, regras e limites nunca são apagados. Teste seguro: `POST /api/cleanup?dry=1` com o header do cron.
 - **Organização do código:** tipos, constantes e catálogos em `src/data.ts`; modais em `src/components/` (QR, assinatura, foto, voz, ficha e câmera); telas de Chat, Dashboard e Checklist em `src/screens/`. O `App.tsx` ficou com a shell (header, navegação, modais e estado global).
 
