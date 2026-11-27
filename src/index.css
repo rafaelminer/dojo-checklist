@@ -237,8 +237,6 @@ a { color: var(--primary); }
 
 .tab-transition { animation: fadeSlide .22s ease both; }
 @keyframes fadeSlide { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-.item-pop { animation: pop .22s ease; }
-@keyframes pop { from { transform: scale(.98); } to { transform: scale(1); } }
 .strike-title {
   position: relative;
   display: inline;
@@ -272,16 +270,6 @@ a { color: var(--primary); }
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   backdrop-filter: blur(22px) saturate(180%);
   -webkit-backdrop-filter: blur(22px) saturate(180%);
-}
-.glass {
-  background: color-mix(in srgb, var(--surface) 74%, transparent);
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border: 1px solid color-mix(in srgb, var(--line) 92%, transparent);
-  box-shadow: 0 10px 36px rgba(16, 24, 40, .10), inset 0 1px 0 rgba(255, 255, 255, .45);
-}
-:root[data-theme="dark"] .glass {
-  box-shadow: 0 14px 44px rgba(0, 0, 0, .46), inset 0 1px 0 rgba(255, 255, 255, .08);
 }
 .toast {
   animation: toastIn .3s cubic-bezier(.2,.9,.2,1) both;
@@ -319,6 +307,14 @@ a { color: var(--primary); }
 .photo-thumb:hover img { transform: scale(1.04); }
 .item-card.is-done { background: color-mix(in srgb, var(--success-bg) 72%, var(--surface)); }
 .item-card.is-miss { background: color-mix(in srgb, var(--danger-bg) 72%, var(--surface)); }
+
+/* Abas do dashboard da gerência */
+.dash-conferencia section[data-group="equipe"],
+.dash-conferencia section[data-group="qualidade"],
+.dash-equipe section[data-group="conferencia"],
+.dash-equipe section[data-group="qualidade"],
+.dash-qualidade section[data-group="conferencia"],
+.dash-qualidade section[data-group="equipe"] { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

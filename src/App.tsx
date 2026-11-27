@@ -51,7 +51,7 @@ const GROUP_CHANNELS: { key:string; name:string; desc:string; members:string[] }
   { key:"grupo:quiosque", name:"Quiosque", desc:"Quiosque · manhã e noite", members:["Laís","Cleide","Talia","Tayara"] },
 ];
 const today = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());
-const nowLocalString = () => { const d=new Date(); const p=(n:number)=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
+const brazilNowString = () => new Intl.DateTimeFormat("en-CA",{timeZone:"America/Sao_Paulo",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date()).replace(" ","T");
 const fmtDate = (d:string) => { const [y,m,dd]=d.split("-"); return `${dd}/${m}/${y}`; };
 const nowTime = () => new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
 function normalizeLogin(v:string){ return v.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,""); }
@@ -406,6 +406,7 @@ export default function App(){
   const [historyMonth,setHistoryMonth]=useState(today().slice(0,7));
   const [consolidated,setConsolidated]=useState<{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}|null>(null);
   const [unitFilter,setUnitFilter]=useState("Todas");
+  const [dashTab,setDashTab]=useState<"conferencia"|"equipe"|"qualidade">("conferencia");
   const [signatureOpen,setSignatureOpen]=useState(false);
   const [signatures,setSignatures]=useState<{id:string;value:SignatureRecord}[]>([]);
   const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
@@ -514,6 +515,7 @@ export default function App(){
   const isManager = authUser==="Gerência";
   const replacedProfiles = useMemo(()=> new Set(credentials.filter(c=>c.value.replacesProfile).map(c=>c.value.replacesProfile!)),[credentials]);
   const unitOf = (p:string) => credentials.find(c=>c.value.profile===p)?.value.unit || "Matriz";
+  const inUnit = (p:string) => unitFilter==="Todas" || unitOf(p)===unitFilter;
   const units = useMemo(()=> Array.from(new Set(["Matriz",...credentials.map(c=>c.value.unit).filter(Boolean)])) as string[], [credentials]);
   const staffProfiles = useMemo(()=> Array.from(new Set([...STAFF_PROFILES.filter(p=>!replacedProfiles.has(p)), ...credentials.map(c=>c.value.profile)])).filter(p=>p!=="Gerência"),[credentials,replacedProfiles]);
   const stationMap = useMemo<Record<string,string>>(()=> { const m={...STATIONS}; replacedProfiles.forEach(p=>delete m[p]); credentials.filter(c=>c.value.station).forEach(c=>{ m[c.value.profile]=c.value.station!; }); return m; },[credentials,replacedProfiles]);
@@ -881,7 +883,7 @@ export default function App(){
     });
     return { person, station: stationMap[person]||"", total:list.length, feitos, faltam };
   }
-  const awaitingList = useMemo(()=> Object.values(submissions).filter(s=>s.value.date===date && s.value.status==="Aguardando" && (isManager || s.value.profile===authUser)).sort((a,b)=>a.value.profile.localeCompare(b.value.profile)),[submissions,date,isManager,authUser]);
+  const awaitingList = useMemo(()=> Object.values(submissions).filter(s=>s.value.date===date && s.value.status==="Aguardando" && (isManager || s.value.profile===authUser) && inUnit(s.value.profile)).sort((a,b)=>a.value.profile.localeCompare(b.value.profile)),[submissions,date,isManager,authUser,unitFilter]);
   const pendingPlans = useMemo(()=> Object.values(actionPlans).filter(p=>p.value.date<=date && (p.value.status==="Pendente"||p.value.status==="Devolvido") && (isManager || p.value.profile===authUser)).sort((a,b)=>{ const ageA = daysBetween(a.value.date, date); const ageB = daysBetween(b.value.date, date); const urgentA = ageA>1 ? 1 : 0; const urgentB = ageB>1 ? 1 : 0; if(urgentA!==urgentB) return urgentB-urgentA; if(ageA!==ageB) return ageB-ageA; return a.value.profile.localeCompare(b.value.profile) || a.value.itemName.localeCompare(b.value.itemName); }),[actionPlans,date,isManager,authUser]);
   const resolvedPlans = useMemo(()=> Object.values(actionPlans).filter(p=>p.value.date===date && p.value.status==="Resolvido" && (isManager || p.value.profile===authUser)).sort((a,b)=>a.value.profile.localeCompare(b.value.profile)),[actionPlans,date,isManager,authUser]);
   const weeklySummary = useMemo(()=>{
@@ -1092,6 +1094,7 @@ export default function App(){
     if(openShortages.length>=2) out.oportunidades.push(`${openShortages.length} faltas em aberto hoje — revisar reposição.`);
     if(!out.destaques.length && !out.inconsistencias.length && !out.riscos.length && !out.oportunidades.length) out.destaques.push("Sem alertas nos últimos 7 dias — operação dentro do padrão.");
     setConsolidated(out);
+    return out;
   }
   function whatsappAlert(){
     const lines:string[]=[`⚠️ Dojo Checklist — ${fmtDate(date)}`];
@@ -1143,6 +1146,26 @@ export default function App(){
     const d=new Date(y,m-1+delta,1);
     const p=(n:number)=>String(n).padStart(2,"0");
     setHistoryMonth(`${d.getFullYear()}-${p(d.getMonth()+1)}`);
+  }
+  async function shareConsolidated(){
+    const c = consolidated || buildConsolidated();
+    if(!c){ setMsg("Gere o parecer antes de compartilhar."); return; }
+    const text = [
+      `DOJO CHECKLIST — PARECER CONSOLIDADO ${fmtDate(date)}`,
+      "",
+      "✅ Destaques", ...c.destaques.map(t=>`• ${t}`),
+      "",
+      "🔁 Inconsistências", ...c.inconsistencias.map(t=>`• ${t}`),
+      "",
+      "⚠️ Riscos", ...c.riscos.map(t=>`• ${t}`),
+      "",
+      "💡 Oportunidades", ...c.oportunidades.map(t=>`• ${t}`),
+    ].join("\n");
+    const file = new File([text],`dojo-parecer-${date}.txt`,{type:"text/plain;charset=utf-8"});
+    try{
+      if(navigator.share){ await navigator.share({files:[file],title:`Dojo — Parecer ${fmtDate(date)}`,text:`Parecer consolidado ${fmtDate(date)}`}); setMsg("Parecer compartilhado."); return; }
+    }catch{ setMsg("Compartilhamento cancelado."); return; }
+    downloadReport(text); setMsg("Parecer baixado — compartilhe pelo seu app de mensagens.");
   }
   function pendingDeps(itemId:string):Item[]{
     return (ITEM_DEPENDENCIES[itemId]||[])
@@ -1851,7 +1874,7 @@ export default function App(){
   }
   function taskOverdue(t:TaskRecord){
     if(t.status==="Concluída") return false;
-    return `${t.dueDate}T${t.dueTime||"23:59"}` < nowLocalString();
+    return `${t.dueDate}T${t.dueTime||"23:59"}` < brazilNowString();
   }
   function tempLimitFor(key:"fria"|"freezer"){ return tempLimits.find(r=>r.value.key===key)?.value; }
   async function saveQuestion(){
@@ -2046,14 +2069,14 @@ export default function App(){
   const loginLockLeft = loginLocked ? Math.ceil((loginLockedUntil-nowTick)/1000) : 0;
   const dayLabel = date===today() ? "Hoje" : date===addDays(today(),-1) ? "Ontem" : fmtDate(date);
   const nextPending = useMemo(()=>{
-    if(!selected) return [];
+    if(!selected || !inUnit(selected)) return [];
     return activeSections.flatMap(sec=>countsForSection(sec).list.map(item=>({item,sec,status:entryFor(item.id).status}))).filter(x=>x.status!=="Feito").slice(0,5);
-  },[selected,date,entries,activeSections]);
+  },[selected,date,entries,activeSections,unitFilter]);
   const sharedProduction = useMemo(()=>{
     if(!selected) return [] as {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}[];
     const mine = new Set((byProfile[selected]||[]).filter(i=>String(i.section||"").includes("Produção")).map(i=>i.id));
     return Object.keys(byProfile)
-      .filter(p=>p!==selected && p!=="Gerência")
+      .filter(p=>p!==selected && p!=="Gerência" && inUnit(p))
       .map(p=>{
         const shared=(byProfile[p]||[]).filter(i=>mine.has(i.id) && String(i.section||"").includes("Produção"));
         if(!shared.length) return null;
@@ -2063,7 +2086,7 @@ export default function App(){
         return {person:p,total:shared.length,doneMe,doneThem,missing};
       })
       .filter((x):x is {person:string;total:number;doneMe:number;doneThem:number;missing:string[]}=>!!x);
-  },[selected,date,entries]);
+  },[selected,date,entries,unitFilter]);
   function sharedProductionSection(){
     if(!sharedProduction.length) return null;
     return <section className="card p-5 mt-4" aria-label="Produção compartilhada">
@@ -2095,6 +2118,9 @@ export default function App(){
     if(deps.length){ setMsg(`Antes de ${match.name}: ${deps.map(d=>d.name).join(", ")}.`); return; }
     const num = text.match(/\b(\d{1,4})\b/)?.[1];
     const cur = entryFor(match.id);
+    if(itemRules.find(r=>r.value.itemId===match.id)?.value.requirePhoto && !cur.photo){
+      setMsg(`Foto obrigatória em ${match.name} antes de marcar como Feito.`); return;
+    }
     if(cur.status===""){ void ensureShiftStarted(); }
     await saveEntry(
       {...cur,profile:selected||"",date,itemId:match.id,status:"Feito",feito:num||cur.feito||"",justificativa:""},
@@ -2187,11 +2213,12 @@ export default function App(){
     {(offlineMode || queuedCount>0) && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-2"><p className="text-[12px] font-bold text-[var(--muted)]">Modo offline · {queuedCount>0 ? `${queuedCount} alteraç${queuedCount===1?"ão":"ões"} aguardando sincronização` : "histórico local"}</p></div>}
     {loading && <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4 space-y-3" aria-label="Carregando dados"><div className="skeleton h-24" /><div className="grid grid-cols-2 gap-3"><div className="skeleton h-20" /><div className="skeleton h-20" /></div><div className="skeleton h-32" /></div>}
 
-    {tab==="overview" && isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[140px] tab-transition">
+    {tab==="overview" && isManager && <main className={`max-w-6xl mx-auto px-4 sm:px-6 pb-[140px] tab-transition dash-${dashTab}`}>
       <div className="mt-6">
         <p className="text-[13px] font-bold tracking-wide uppercase text-[var(--muted)]">Conferência</p>
         <h2 className="font-extrabold text-[26px] leading-tight mt-1">Hoje, {fmtDate(date)}</h2>
         <div className="mt-3 flex items-center gap-2"><span className="text-[12px] font-bold text-[var(--muted)]">Unidade</span><select value={unitFilter} onChange={e=>setUnitFilter(e.target.value)} className="field !mt-0 !w-auto min-w-[150px]" aria-label="Filtrar por unidade"><option>Todas</option>{units.map(u=><option key={u}>{u}</option>)}</select>{unitFilter!=="Todas" && <span className="text-[12px] text-[var(--muted)]">Fuso: America/Sao_Paulo</span>}</div>
+        <div className="flex gap-2 mt-3"><button onClick={()=>setDashTab("conferencia")} className={`chip ${dashTab==="conferencia"?"active":""}`}>Conferência</button><button onClick={()=>setDashTab("equipe")} className={`chip ${dashTab==="equipe"?"active":""}`}>Equipe</button><button onClick={()=>setDashTab("qualidade")} className={`chip ${dashTab==="qualidade"?"active":""}`}>Qualidade</button></div>
       </div>
       <section className="grid grid-cols-2 gap-3 mt-5" aria-label="Dashboard do dia">
         <div className="card p-4"><p className="text-[12px] font-bold text-[var(--muted)]">Hoje concluídos</p><p className="font-extrabold text-[clamp(26px,7vw,34px)] leading-tight mt-1">{completedSectionsToday} / {expectedSectionsToday}</p></div>
@@ -2236,7 +2263,7 @@ export default function App(){
           <p className="text-[12px] text-[var(--muted)] mt-1.5">Iniciado {p.shift?.startedAt||"—"} • Concluído {p.shift?.finishedAt||"—"}</p>
         </li>)}</ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Cadastro de funcionários">
+      <section className="card p-5 mt-4" aria-label="Cadastro de funcionários" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Cadastro de funcionários</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Somente a Gerência cadastra. O novo login entra na lista de pessoas, no seletor de conferência e no grupo do chat.</p>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">
@@ -2255,12 +2282,12 @@ export default function App(){
           {credentials.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum funcionário cadastrado além da equipe inicial.</li> : credentials.map(c=><li key={c.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[15px]">{c.value.profile}</span><span className="text-[12px] text-[var(--muted)]">login {c.value.login}{c.value.station ? ` · ${c.value.station}` : ""}{c.value.group ? ` · ${c.value.group}` : ""}</span><button type="button" onClick={()=>startStaffEdit(c)} className="ml-auto bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Editar login/senha</button></li>)}
         </ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Próximas pendências">
+      <section className="card p-5 mt-4" aria-label="Próximas pendências" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Próximas pendências</h3>
         {nextPending.length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Tudo em dia.</p> : <ul className="mt-3 space-y-2">{nextPending.map(({item,sec,status})=><li key={item.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere]">{item.name}</span><span className="text-[12px] text-[var(--muted)]">{displaySectionTitle(sec)} · {status||"sem marcação"}</span><button onClick={()=>{setTab("chat"); setConversation(selected||"");}} className="bg-white text-black font-extrabold text-[12px] px-3 py-2 rounded-xl">Ver conversa</button></li>)}</ul>}
       </section>
       {sharedProductionSection()}
-      <section className="card p-5 mt-4" aria-label="QR por estação">
+      <section className="card p-5 mt-4" aria-label="QR por estação" data-group="equipe">
         <h3 className="font-extrabold text-[18px] flex items-center gap-2"><QrCode size={18} className="text-[var(--primary)]"/> QR por estação</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Gere um QR para cada estação e cole no posto: abre o app com o login da pessoa preenchido.</p>
         <div className="flex flex-wrap gap-2 mt-3">{staffProfiles.map(p=><button key={p} type="button" onClick={()=>openStationQr(p)} className="chip"><QrCode size={13}/>{p}</button>)}</div>
@@ -2268,15 +2295,15 @@ export default function App(){
       {consolidated && <section className="card p-5 mt-4" aria-label="Parecer consolidado">
         <h3 className="font-extrabold text-[18px]">Parecer consolidado — últimos 7 dias</h3>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">{(["destaques","inconsistencias","riscos","oportunidades"] as const).map(k=>{ const titles={destaques:"✅ Destaques",inconsistencias:"🔁 Inconsistências",riscos:"⚠️ Riscos",oportunidades:"💡 Oportunidades"}; return <div key={k} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-[12px] font-extrabold uppercase text-[var(--muted)]">{titles[k]}</p><ul className="mt-2 space-y-1 text-[13px] leading-relaxed">{consolidated[k].length?consolidated[k].map((t,i)=><li key={i}>• {t}</li>):<li className="text-[var(--muted)]">Nada registrado.</li>}</ul></div>; })}</div>
-        <button onClick={()=>void shareReport()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Compartilhar parecer</button>
+        <button onClick={()=>void shareConsolidated()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Compartilhar parecer</button>
       </section>}
-      <section className="card p-5 mt-4" aria-label="Histórico em calendário">
+      <section className="card p-5 mt-4" aria-label="Histórico em calendário" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Histórico em calendário</h3>
         <div className="flex items-center justify-between gap-2 mt-3"><button onClick={()=>shiftHistoryMonth(-1)} className="chip">←</button><p className="font-bold text-[14px] capitalize">{new Date(`${historyMonth}-02T12:00:00`).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</p><button onClick={()=>shiftHistoryMonth(1)} className="chip">→</button></div>
         <div className="grid grid-cols-7 gap-1 mt-3">{["D","S","T","Q","Q","S","S"].map((d,i)=><span key={i} className="text-center text-[11px] font-bold text-[var(--muted)]">{d}</span>)}{(()=>{ const [y,m]=historyMonth.split("-").map(Number); const first=new Date(y,m-1,1).getDay(); const days=new Date(y,m,0).getDate(); return <>{Array.from({length:first},(_,i)=><span key={`b${i}`}/>)}{Array.from({length:days},(_,i)=>{ const day=i+1; const p=(n:number)=>String(n).padStart(2,"0"); const ds=`${historyMonth}-${p(day)}`; const has=historyHas(ds); return <button key={ds} onClick={()=>setHistoryDate(ds)} className={`aspect-square rounded-lg text-[12px] font-bold border ${historyDate===ds?"bg-[var(--primary)] text-white border-[var(--primary)]":has?"bg-[var(--surface-2)] text-[var(--ink)] border-[var(--primary)]":"bg-[var(--surface-inset)] text-[var(--muted)] border-[var(--line)]"}`}>{day}</button>; })}</>; })()}</div>
-        {(()=>{ const subs=Object.values(submissions).filter(r=>r.value.date===historyDate); const ent=Object.values(entries).filter(r=>r.value.date===historyDate); const qa=qualityAnswers.filter(r=>r.value.date===historyDate); const tp=Object.values(temps).filter(r=>r.value.date===historyDate); const f=ent.filter(r=>r.value.status==="Feito").length; const n=ent.filter(r=>r.value.status==="Não feito").length; const photos=ent.filter(r=>!!r.value.photo).length; return <div className="mt-4 rounded-xl bg-[var(--surface-2)] p-3"><p className="font-extrabold text-[14px]">{fmtDate(historyDate)}</p><p className="text-[13px] text-[var(--muted)] mt-1">Checklists concluídos: {subs.length} · Itens: {f} feitos / {n} não feitos · Fotos: {photos} · Auditorias: {qa.length} · Temperaturas: {tp.length}</p>{subs.length>0 && <ul className="mt-2 space-y-1 text-[12px]">{subs.map(r=><li key={r.id}>• {r.value.profile} · {r.value.section} · {r.value.status}</li>)}</ul>}</div>; })()}
+        {(()=>{ const subs=Object.values(submissions).filter(r=>r.value.date===historyDate&&inUnit(r.value.profile)); const ent=Object.values(entries).filter(r=>r.value.date===historyDate&&inUnit(r.value.profile)); const qa=qualityAnswers.filter(r=>r.value.date===historyDate&&inUnit(r.value.profile)); const tp=Object.values(temps).filter(r=>r.value.date===historyDate&&inUnit(r.value.profile)); const f=ent.filter(r=>r.value.status==="Feito").length; const n=ent.filter(r=>r.value.status==="Não feito").length; const photos=ent.filter(r=>!!r.value.photo).length; return <div className="mt-4 rounded-xl bg-[var(--surface-2)] p-3"><p className="font-extrabold text-[14px]">{fmtDate(historyDate)}</p><p className="text-[13px] text-[var(--muted)] mt-1">Checklists concluídos: {subs.length} · Itens: {f} feitos / {n} não feitos · Fotos: {photos} · Auditorias: {qa.length} · Temperaturas: {tp.length}</p>{subs.length>0 && <ul className="mt-2 space-y-1 text-[12px]">{subs.map(r=><li key={r.id}>• {r.value.profile} · {r.value.section} · {r.value.status}</li>)}</ul>}</div>; })()}
       </section>
-      <section className="card p-5 mt-4" aria-label="Estoque e recebimento">
+      <section className="card p-5 mt-4" aria-label="Estoque e recebimento" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Estoque e recebimento</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Cadastre itens com saldo esperado, mínimo e máximo. A equipe conta e confere o recebimento.</p>
         <div className="grid gap-3 mt-4 sm:grid-cols-3">
@@ -2298,7 +2325,7 @@ export default function App(){
         <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Últimos 7 dias — {selected}</p>
         <div className="flex items-end gap-2 mt-3 h-[100px]">{Array.from({length:7},(_,i)=>addDays(date,-(6-i))).map(d=>{ const v=temps[`${selected}|${d}`]?.value; const n=parseTempValue(v?.fria||""); const h=n===null?0:Math.min(100,Math.max(6,Math.round((n+10)/20*100))); return <div key={d} className="flex-1 flex flex-col items-center gap-1"><div className="w-full rounded-t-lg bg-[var(--primary)]" style={{height:`${h}%`}} title={n===null?"sem registro":`${n} °C`} /><span className="text-[10px] text-[var(--muted)]">{d.slice(8)}</span></div>; })}</div>
       </section>
-      <section className="card p-5 mt-4" aria-label="Auditoria de qualidade">
+      <section className="card p-5 mt-4" aria-label="Auditoria de qualidade" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Auditoria de qualidade</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Perguntas com peso e nota mínima; a foto tirada aparece ao lado da referência para conferência.</p>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">
@@ -2316,13 +2343,13 @@ export default function App(){
         <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Respostas de hoje — {selected}</p>
         <ul className="mt-2 space-y-3">{qualityAnswers.filter(a=>a.value.date===date && a.value.profile===selected).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma resposta hoje.</li> : qualityAnswers.filter(a=>a.value.date===date && a.value.profile===selected).map(row=>{ const q=questions.find(x=>x.id===row.value.questionId)?.value; return <li key={row.id} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{row.value.question} · {row.value.verdict}</p><div className="flex flex-wrap gap-2 mt-2">{q?.referencePhoto && <div className="flex-1 min-w-[100px]"><p className="text-[11px] text-[var(--muted)]">Referência</p><img src={q.referencePhoto} alt="Referência" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]" /></div>}{row.value.photo && <div className="flex-1 min-w-[100px]"><p className="text-[11px] text-[var(--muted)]">Capturada</p><img src={row.value.photo} alt="Capturada" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]" /></div>}</div>{row.value.note && <p className="text-[13px] mt-2">{row.value.note}</p>}{row.value.reviewedBy ? <p className="text-[12px] font-bold text-[var(--success-text)] mt-2">Revisado por {row.value.reviewedBy} · {row.value.reviewedVerdict}</p> : <div className="flex gap-2 mt-2"><button onClick={()=>void reviewQuality(row,true)} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Confirmar</button><button onClick={()=>void reviewQuality(row,false)} className="bg-[var(--danger)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Reprovar</button></div>}</li>; })}</ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Regras de qualidade">
+      <section className="card p-5 mt-4" aria-label="Regras de qualidade" data-group="qualidade">
         <h3 className="font-extrabold text-[18px]">Regras de qualidade</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Exija foto antes de marcar um item como Feito.</p>
         <div className="flex flex-wrap gap-2 mt-3"><select value={auxForm.ruleItem||""} onChange={e=>setAuxForm(p=>({...p,ruleItem:e.target.value}))} className="field flex-1 min-w-[200px]" aria-label="Item da regra"><option value="">Selecione o item</option>{(byProfile[selected||""]||ALL_ITEMS).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button disabled={!auxForm.ruleItem} onClick={()=>void togglePhotoRule(auxForm.ruleItem!)} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px] disabled:opacity-50">{itemRules.find(r=>r.value.itemId===auxForm.ruleItem)?.value.requirePhoto?"Remover exigência":"Exigir foto"}</button></div>
         <div className="flex flex-wrap gap-2 mt-3">{itemRules.filter(r=>r.value.requirePhoto).map(r=><span key={r.id} className="chip">{ALL_ITEMS.find(i=>i.id===r.value.itemId)?.name||r.value.itemId} 📷</span>)}</div>
       </section>
-      <section id="dash-equipe" className="card p-5 mt-4" aria-label="Tarefas avulsas">
+      <section id="dash-equipe" className="card p-5 mt-4" aria-label="Tarefas avulsas" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Tarefas avulsas</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Tarefa com responsável e prazo. Vencida, aparece em vermelho e a gerência é avisada.</p>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">
@@ -2335,18 +2362,18 @@ export default function App(){
         <button onClick={()=>void createTask()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[14px]">Criar tarefa</button>
         <ul className="mt-4 space-y-2">{tasks.filter(r=>taskApplies(r.value)).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma tarefa avulsa.</li> : tasks.filter(r=>taskApplies(r.value)).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{row.value.owner} · {fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span>{row.value.status==="Aberta" ? <button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button> : <span className="text-[12px] font-bold text-[var(--success-text)]">Concluída</span>}</li>)}</ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Logbook da gerência">
+      <section className="card p-5 mt-4" aria-label="Logbook da gerência" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Logbook da gerência</h3>
         <textarea value={auxForm.logText||""} onChange={e=>setAuxForm(p=>({...p,logText:e.target.value}))} placeholder="Registro do turno: ocorrências, decisões, visitas…" className="field mt-3 min-h-[72px]" aria-label="Texto do logbook" />
         <button onClick={()=>void saveLogbook()} className="mt-2 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[14px]">Salvar registro</button>
         <ul className="mt-4 space-y-2">{logbook.slice(0,12).map(row=><li key={row.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="text-[14px] [overflow-wrap:anywhere]">{row.value.text}</p><p className="text-[12px] text-[var(--muted)] mt-0.5">{fmtDate(row.value.date)} · {row.value.shift} · {row.value.author} {row.value.time}</p></li>)}</ul>
       </section>
-      <section className="card p-5 mt-4" aria-label="Treinamentos">
+      <section className="card p-5 mt-4" aria-label="Treinamentos" data-group="equipe">
         <h3 className="font-extrabold text-[18px]">Treinamentos</h3>
         <div className="flex flex-wrap gap-2 mt-3"><input value={auxForm.trainingTitle||""} onChange={e=>setAuxForm(p=>({...p,trainingTitle:e.target.value}))} placeholder="Treinamento" className="field flex-1 min-w-[160px]" aria-label="Título do treinamento" /><select value={auxForm.trainingPerson||""} onChange={e=>setAuxForm(p=>({...p,trainingPerson:e.target.value}))} className="field flex-1 min-w-[150px]" aria-label="Pessoa do treinamento"><option value="">Pessoa</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select><button onClick={()=>void saveTraining()} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Atribuir</button></div>
         <ul className="mt-4 space-y-2">{trainings.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum treinamento atribuído.</li> : trainings.map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{row.value.title} · {row.value.person}</span><span className="text-[12px] text-[var(--muted)]">{row.value.status}</span>{row.value.status!=="Aprovado" && <button onClick={()=>void setTrainingStatus(row,"Aprovado")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Aprovar</button>}</li>)}</ul>
       </section>
-      <section className="card p-5 mt-6" aria-label="Conferência das produções">
+      <section className="card p-5 mt-6" aria-label="Conferência das produções" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Conferência das produções — {awaitingList.length} aguardando</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Confira cada produção concluída. Se algo estiver errado, escreva a observação e peça correção — a equipe recebe no chat.</p>
         {awaitingList.length===0 ? <p className="text-sm text-[var(--muted)] mt-3 leading-relaxed">Nenhuma produção aguardando conferência.</p> : <ul className="mt-4 space-y-4">{awaitingList.map(s=>{
@@ -2384,7 +2411,7 @@ export default function App(){
         })}</ul>}
         {resolvedPlans.length>0 && <div className="mt-4"><h4 className="font-bold text-[15px]">Resolvidos hoje: {resolvedPlans.length}</h4><ul className="mt-2 space-y-2">{resolvedPlans.map(p=><li key={p.id} className="text-[13px] text-[var(--muted)] [overflow-wrap:anywhere]">{p.value.itemName} — {p.value.profile} · Resolvido às {p.value.resolvedAt || ""}</li>)}</ul></div>}
       </section>
-      {isManager && <section className="card p-5 mt-4" aria-label="Lista de Falta de Insumo">
+      {isManager && <section className="card p-5 mt-4" aria-label="Lista de Falta de Insumo" data-group="conferencia">
         <h3 className="font-extrabold text-[18px]">Lista de Falta de Insumo</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">Automática: toda justificativa “Faltou insumo” entra aqui. Marcar como comprado tira da lista.</p>
         {openShortages.length===0 ? <p className="text-sm text-[var(--muted)] mt-3 leading-relaxed">Nenhuma falta hoje.</p> : <ul className="mt-4 space-y-4">{openShortages.map(s=><li key={s.id} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
