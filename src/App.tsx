@@ -506,7 +506,8 @@ export default function App(){
     } catch (err) { const m = err instanceof Error ? err.message : String(err); setModuleMsg(`Não foi possível excluir a foto: ${m}`); setOfflineMode(true); }
     setModuleSaving(false);
   }
-  useEffect(()=>{ reloadRecords().then(()=>{ setOfflineMode(false); }).catch(()=>{ setOfflineMode(true); }).finally(()=>setLoading(false)); },[]);
+  useEffect(()=>{ setLoading(false); },[]);
+  useEffect(()=>{ if(!authUser) return; reloadRecords().then(()=>setOfflineMode(false)).catch(()=>setOfflineMode(true)); },[authUser]);
   // Catálogo de itens no backend: usado pelo resumo diário automático.
   useEffect(()=>{
     if(!authUser) return;
