@@ -621,27 +621,15 @@ export default function App(){
         return;
       }
     }catch{ setAuthToken(null); }
-    const cred = credentials.find(c=>normalizeLogin(c.value.login)===loginKey);
-    const stored = String(cred?.value.password||"").trim();
-    let ok = false;
-    if(/^[a-f0-9]{64}$/.test(stored)) ok = (await hashPassword(enteredPassword))===stored;
-    else ok = enteredPassword===stored.toLowerCase() || (!stored && enteredPassword===DEFAULT_PASSWORD.trim().toLowerCase());
-    if(!ok){
-      const next = (attempts[loginKey]||0)+1;
-      setAttempts(prev=>({...prev,[loginKey]:next}));
-      if(next>=3){
-        const u = Date.now()+30000;
-        setLockedUntil(prev=>({...prev,[loginKey]:u}));
-        setLoginError("Muitas tentativas. Aguarde 30s");
-      } else {
-        setLoginError("Login ou senha incorretos");
-      }
-      return;
+    const next = (attempts[loginKey]||0)+1;
+    setAttempts(prev=>({...prev,[loginKey]:next}));
+    if(next>=3){
+      const u = Date.now()+30000;
+      setLockedUntil(prev=>({...prev,[loginKey]:u}));
+      setLoginError("Muitas tentativas. Aguarde 30s");
+    } else {
+      setLoginError("Login ou senha incorretos");
     }
-    setLoginError("");
-    setAttempts(prev=>({...prev,[loginKey]:0}));
-    enterApp(profile);
-    setMsg(`Olá, ${profile}!`);
   }
 
   const items = selected?effectiveByProfile[selected]||[]:[];
