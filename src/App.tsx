@@ -177,6 +177,7 @@ export default function App(){
   const [historyDate,setHistoryDate]=useState(today());
   const [historyMonth,setHistoryMonth]=useState(today().slice(0,7));
   const [consolidated,setConsolidated]=useState<{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}|null>(null);
+  const [reportFilters,setReportFilters]=useState<{unit:string;person:string;section:string}>({unit:"Todas",person:"Todos",section:"Todas"});
   const [unitFilter,setUnitFilter]=useState("Todas");
   const [dashTab,setDashTab]=useState<"conferencia"|"equipe"|"qualidade">("conferencia");
   const [signatureOpen,setSignatureOpen]=useState(false);
@@ -861,19 +862,26 @@ export default function App(){
   function buildConsolidated(){
     const out:{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}={destaques:[],inconsistencias:[],riscos:[],oportunidades:[]};
     const lastDays = Array.from({length:7},(_,i)=>addDays(date,-i));
-    const perfect = staffProfiles.filter(p=>lastDays.every(d=>{ const list=effectiveByProfile[p]||[]; if(!list.length) return false; const f=list.filter(i=>entries[`${p}|${d}|${i.id}`]?.value.status==="Feito").length; return f===list.length; }));
+    const scopedPeople = staffProfiles.filter(p=>(reportFilters.person==="Todos"||p===reportFilters.person)&&(reportFilters.unit==="Todas"||unitOf(p)===reportFilters.unit));
+    const inSection = (itemId:string) => reportFilters.section==="Todas" || (ALL_ITEMS.find(i=>i.id===itemId)?.section===reportFilters.section);
+    const listFor = (p:string) => (effectiveByProfile[p]||[]).filter(i=>inSection(i.id));
+    const scopedEntries = Object.values(entries).filter(r=>scopedPeople.includes(r.value.profile)&&inSection(r.value.itemId));
+    const scopedPlans = Object.values(actionPlans).filter(r=>scopedPeople.includes(r.value.profile)&&inSection(r.value.itemId));
+    const scopedShortages = openShortages.filter(s=>scopedPeople.includes(s.value.profile)&&inSection(s.value.itemId));
+    const scopedTemps = Object.values(temps).filter(r=>r.value.date===date&&scopedPeople.includes(r.value.profile));
+    const perfect = scopedPeople.filter(p=>lastDays.every(d=>{ const list=listFor(p); if(!list.length) return false; const f=list.filter(i=>entries[`${p}|${d}|${i.id}`]?.value.status==="Feito").length; return f===list.length; }));
     if(perfect.length) out.destaques.push(`${perfect.join(", ")} com 100% nos últimos 7 dias.`);
     const failCount = new Map<string,number>();
-    lastDays.forEach(d=>Object.values(entries).forEach(r=>{ if(r.value.date===d && r.value.status==="Não feito") failCount.set(r.value.itemId,(failCount.get(r.value.itemId)||0)+1); }));
+    lastDays.forEach(d=>scopedEntries.forEach(r=>{ if(r.value.date===d && r.value.status==="Não feito") failCount.set(r.value.itemId,(failCount.get(r.value.itemId)||0)+1); }));
     Array.from(failCount.entries()).filter(([,n])=>n>=2).slice(0,5).forEach(([id,n])=>{ const name=ALL_ITEMS.find(i=>i.id===id)?.name||id; out.inconsistencias.push(`${name} marcado como Não feito ${n}x em 7 dias.`); });
-    const tempRows = Object.values(temps).filter(r=>r.value.date===date);
+    const tempRows = scopedTemps;
     tempRows.forEach(r=>{ const f=parseTempValue(r.value.fria), g=parseTempValue(r.value.freezer); if((f!==null&&(f<friaLim.min||f>friaLim.max))||(g!==null&&(g<freezerLim.min||g>freezerLim.max))) out.riscos.push(`Temperatura fora da faixa registrada por ${r.value.profile}: câmara ${r.value.fria||"—"} °C / freezer ${r.value.freezer||"—"} °C.`); });
     if(expiryAlerts.length) out.riscos.push(`${expiryAlerts.length} produto(s) vencido(s) ou vencendo em até 3 dias.`);
-    if(pendingPlans.length>=3) out.riscos.push(`${pendingPlans.length} planos de ação pendentes.`);
+    if(scopedPlans.length>=3) out.riscos.push(`${scopedPlans.length} planos de ação pendentes.`);
     const planCount = new Map<string,number>();
-    Object.values(actionPlans).forEach(r=>planCount.set(r.value.itemName,(planCount.get(r.value.itemName)||0)+1));
+    scopedPlans.forEach(r=>planCount.set(r.value.itemName,(planCount.get(r.value.itemName)||0)+1));
     Array.from(planCount.entries()).filter(([,n])=>n>=2).slice(0,4).forEach(([name,n])=>out.oportunidades.push(`Plano de ação recorrente: ${name} (${n}x) — revisar processo.`));
-    if(openShortages.length>=2) out.oportunidades.push(`${openShortages.length} faltas em aberto hoje — revisar reposição.`);
+    if(scopedShortages.length>=2) out.oportunidades.push(`${scopedShortages.length} faltas em aberto hoje — revisar reposição.`);
     if(!out.destaques.length && !out.inconsistencias.length && !out.riscos.length && !out.oportunidades.length) out.destaques.push("Sem alertas nos últimos 7 dias — operação dentro do padrão.");
     setConsolidated(out);
     return out;
@@ -934,6 +942,7 @@ export default function App(){
     if(!c){ setMsg("Gere o parecer antes de compartilhar."); return; }
     const text = [
       `DOJO CHECKLIST — PARECER CONSOLIDADO ${fmtDate(date)}`,
+      `Filtros: unidade ${reportFilters.unit} · pessoa ${reportFilters.person} · seção ${reportFilters.section}`,
       "",
       "✅ Destaques", ...c.destaques.map(t=>`• ${t}`),
       "",
@@ -2136,6 +2145,12 @@ export default function App(){
       </section>
       {consolidated && <section className="card p-5 mt-4" aria-label="Parecer consolidado">
         <h3 className="font-extrabold text-[18px]">Parecer consolidado — últimos 7 dias</h3>
+        <div className="flex flex-wrap gap-2 mt-3">
+          <select value={reportFilters.unit} onChange={e=>{setReportFilters(p=>({...p,unit:e.target.value}));setConsolidated(null);}} className="field !mt-0 min-w-[130px]" aria-label="Filtro unidade do parecer"><option>Todas</option>{units.map(u=><option key={u}>{u}</option>)}</select>
+          <select value={reportFilters.person} onChange={e=>{setReportFilters(p=>({...p,person:e.target.value}));setConsolidated(null);}} className="field !mt-0 min-w-[130px]" aria-label="Filtro pessoa do parecer"><option>Todos</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select>
+          <select value={reportFilters.section} onChange={e=>{setReportFilters(p=>({...p,section:e.target.value}));setConsolidated(null);}} className="field !mt-0 min-w-[150px]" aria-label="Filtro seção do parecer"><option>Todas</option>{SECTIONS.map(s=><option key={s}>{s}</option>)}</select>
+          <button onClick={()=>buildConsolidated()} className="bg-[var(--secondary-bg)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Gerar parecer</button>
+        </div>
         <div className="grid gap-3 mt-4 sm:grid-cols-2">{(["destaques","inconsistencias","riscos","oportunidades"] as const).map(k=>{ const titles={destaques:"✅ Destaques",inconsistencias:"🔁 Inconsistências",riscos:"⚠️ Riscos",oportunidades:"💡 Oportunidades"}; return <div key={k} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-[12px] font-extrabold uppercase text-[var(--muted)]">{titles[k]}</p><ul className="mt-2 space-y-1 text-[13px] leading-relaxed">{consolidated[k].length?consolidated[k].map((t,i)=><li key={i}>• {t}</li>):<li className="text-[var(--muted)]">Nada registrado.</li>}</ul></div>; })}</div>
         <button onClick={()=>void shareConsolidated()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px]">Compartilhar parecer</button>
       </section>}
