@@ -89,6 +89,7 @@ curl -X POST https://dojo-checklist.vercel.app/api/daily \
 - **ErrorBoundary:** erro de renderização mostra tela de recarga em vez de página em branco.
 - **Push:** inscrições inválidas (404/410/400) são removidas automaticamente.
 - **Onda 1 (referências Checa Aí / Chequei / OrganizaAí):** contagem de estoque com esperado × contado × diferença; recebimento de mercadorias item a item com status “Conferido/Divergente”; limites de temperatura configuráveis com alerta e histórico em gráfico; foto obrigatória em itens críticos; tarefas com dias da semana específicos.
+- **Onda 2 (auditoria de qualidade):** perguntas com tipo (check/foto/texto/temperatura), peso 1–5, nota mínima e foto de referência; respostas com veredito Conforme/Parcial/Não conforme e nota ponderada; foto capturada ao lado da referência para revisão da gerência.
 
 ## Notificações push
 
