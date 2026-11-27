@@ -17,7 +17,8 @@ type Shortage = { profile: string; date: string; itemId: string; itemName: strin
 type WeeklySubmission = { profile: string; weekKey: string; date: string; items: { itemId: string; status: Status }[]; status: "Aguardando" | "Aprovado"; fingerprint: string };
 type ExpiryEntry = { profile: string; date: string; product: string; expiryDate: string; registeredAt: string };
 type MaintEntry = { profile: string; date: string; itemId: string; status: Status; note: string };
-type CredentialRecord = { login: string; profile: string; password: string; station?: string; group?: string; shift?: string; replaces?: string; replacesProfile?: string };
+type CredentialRecord = { login: string; profile: string; password: string; station?: string; group?: string; shift?: string; unit?: string; pinHash?: string; replaces?: string; replacesProfile?: string };
+type SignatureRecord = { profile: string; date: string; time: string; data: string };
 type TempEntry = { profile: string; date: string; fria: string; freezer: string };
 type ShiftEntry = { profile: string; date: string; startedAt: string; startedBy: string; finishedAt?: string; finishedBy?: string };
 type RecordRow = { id: string; value: any };
@@ -404,6 +405,13 @@ export default function App(){
   const [historyDate,setHistoryDate]=useState(today());
   const [historyMonth,setHistoryMonth]=useState(today().slice(0,7));
   const [consolidated,setConsolidated]=useState<{destaques:string[];inconsistencias:string[];riscos:string[];oportunidades:string[]}|null>(null);
+  const [unitFilter,setUnitFilter]=useState("Todas");
+  const [pinMode,setPinMode]=useState(false);
+  const [pinLogin,setPinLogin]=useState<{profile:string;pin:string}>({profile:"",pin:""});
+  const [signatureOpen,setSignatureOpen]=useState(false);
+  const [signatures,setSignatures]=useState<{id:string;value:SignatureRecord}[]>([]);
+  const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
+  const drawingRef=useRef(false);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
   const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
@@ -507,6 +515,8 @@ export default function App(){
   const [reproveNote,setReproveNote]=useState("");
   const isManager = authUser==="Gerência";
   const replacedProfiles = useMemo(()=> new Set(credentials.filter(c=>c.value.replacesProfile).map(c=>c.value.replacesProfile!)),[credentials]);
+  const unitOf = (p:string) => credentials.find(c=>c.value.profile===p)?.value.unit || "Matriz";
+  const units = useMemo(()=> Array.from(new Set(["Matriz",...credentials.map(c=>c.value.unit).filter(Boolean)])) as string[], [credentials]);
   const staffProfiles = useMemo(()=> Array.from(new Set([...STAFF_PROFILES.filter(p=>!replacedProfiles.has(p)), ...credentials.map(c=>c.value.profile)])).filter(p=>p!=="Gerência"),[credentials,replacedProfiles]);
   const stationMap = useMemo<Record<string,string>>(()=> { const m={...STATIONS}; replacedProfiles.forEach(p=>delete m[p]); credentials.filter(c=>c.value.station).forEach(c=>{ m[c.value.profile]=c.value.station!; }); return m; },[credentials,replacedProfiles]);
   const loginMap = useMemo<Record<string,string>>(()=> { const m={...LOGIN_TO_PROFILE}; credentials.forEach(c=>{ if(c.value.replaces) delete m[normalizeLogin(c.value.replaces)]; }); credentials.forEach(c=>{ m[normalizeLogin(c.value.login)]=c.value.profile; }); return m; },[credentials]);
@@ -744,7 +754,7 @@ export default function App(){
 
   async function reloadAux(){
     try{
-      const [t,l,tr,ii,rd,si,sc,rc,tl,ir,qu,qa] = await Promise.all([
+      const [t,l,tr,ii,rd,si,sc,rc,tl,ir,qu,qa,sg] = await Promise.all([
         api("records.list",{collection:"dojo_tasks",limit:200}),
         api("records.list",{collection:"dojo_logbook",limit:200}),
         api("records.list",{collection:"dojo_trainings",limit:200}),
@@ -757,6 +767,7 @@ export default function App(){
         api("records.list",{collection:"dojo_item_rules",limit:500}),
         api("records.list",{collection:"dojo_questions",limit:500}),
         api("records.list",{collection:"dojo_quality_answers",limit:1000}),
+        api("records.list",{collection:"dojo_signatures",limit:200}),
       ]);
       setTasks((t.records||[]) as any);
       setLogbook((l.records||[]) as any);
@@ -770,6 +781,7 @@ export default function App(){
       setItemRules((ir.records||[]) as any);
       setQuestions((qu.records||[]) as any);
       setQualityAnswers((qa.records||[]) as any);
+      setSignatures((sg.records||[]) as any);
     }catch{}
   }
   useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
@@ -809,6 +821,12 @@ export default function App(){
     setShowTodayDone(false); lastTempKey.current="";
   }
 
+  async function loginByPin(){
+    const cred = credentials.find(c=>c.value.profile===pinLogin.profile);
+    if(!cred?.value.pinHash){ setLoginError("Esta pessoa não tem PIN cadastrado."); return; }
+    if((await hashPassword(pinLogin.pin))!==cred.value.pinHash){ setLoginError("PIN incorreto."); return; }
+    setLoginError(""); enterApp(cred.value.profile); setMsg(`Olá, ${cred.value.profile}!`);
+  }
   async function handleLoginSubmit(){
     const loginKey = normalizeLogin(loginInput);
     if(!loginKey){ setLoginError("Digite seu login."); return; }
@@ -926,6 +944,7 @@ export default function App(){
     rows.sort((a,b)=> b.pct - a.pct || b.feitos - a.feitos || a.person.localeCompare(b.person));
     return { weekStart, weekEnd, rows };
   },[submissions, date, people]);
+  const rankingRows = weeklyRanking.rows.filter(r=>unitFilter==="Todas"||unitOf(r.person)===unitFilter);
   const draftLabel = useMemo(()=>{
     if(!selected) return "";
     let latest = "";
@@ -1095,6 +1114,34 @@ export default function App(){
     const url=`https://api.whatsapp.com/send?text=${encodeURIComponent(lines.join("\n"))}`;
     window.open(url,"_blank","noopener,noreferrer");
     setMsg("Conversa do WhatsApp aberta com o alerta preenchido.");
+  }
+  function sigPos(ev:React.PointerEvent<HTMLCanvasElement>){
+    const c=signatureCanvasRef.current!; const r=c.getBoundingClientRect();
+    return { x:(ev.clientX-r.left)*(c.width/r.width), y:(ev.clientY-r.top)*(c.height/r.height) };
+  }
+  function sigDown(ev:React.PointerEvent<HTMLCanvasElement>){
+    const c=signatureCanvasRef.current; if(!c) return;
+    const ctx=c.getContext("2d"); if(!ctx) return;
+    drawingRef.current=true; const p=sigPos(ev); ctx.beginPath(); ctx.moveTo(p.x,p.y); c.setPointerCapture(ev.pointerId);
+  }
+  function sigMove(ev:React.PointerEvent<HTMLCanvasElement>){
+    if(!drawingRef.current) return; const c=signatureCanvasRef.current; const ctx=c?.getContext("2d"); if(!c||!ctx) return;
+    const p=sigPos(ev); ctx.lineTo(p.x,p.y); ctx.stroke();
+  }
+  function sigUp(){ drawingRef.current=false; }
+  function clearSignature(){
+    const c=signatureCanvasRef.current; const ctx=c?.getContext("2d"); if(!c||!ctx) return;
+    ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,c.width,c.height);
+    ctx.strokeStyle="#111111"; ctx.lineWidth=3; ctx.lineCap="round"; ctx.lineJoin="round";
+  }
+  function openSignature(){
+    setSignatureOpen(true);
+    setTimeout(clearSignature,60);
+  }
+  async function saveSignature(){
+    const c=signatureCanvasRef.current; if(!c) return;
+    const value:SignatureRecord={profile:selected||authUser||"",date,time:nowTime(),data:c.toDataURL("image/png")};
+    try{ await api("records.create",{collection:"dojo_signatures",value}); setSignatureOpen(false); await reloadAux(); setMsg("Assinatura salva."); }catch{ setMsg("Não foi possível salvar a assinatura."); }
   }
   function historyHas(d:string){
     return Object.values(submissions).some(r=>r.value.date===d) || Object.values(entries).some(r=>r.value.date===d) || qualityAnswers.some(r=>r.value.date===d) || Object.values(temps).some(r=>r.value.date===d);
@@ -1797,6 +1844,8 @@ export default function App(){
       station:String(staffForm.station||"Equipe").trim(),
       group:String(staffForm.group||"").trim(),
       shift:String(staffForm.shift||"Manhã").trim(),
+      unit:String(staffForm.unit||"Matriz").trim(),
+      ...(String(staffForm.pin||"").trim() ? {pinHash: await hashPassword(String(staffForm.pin).trim())} : {}),
       ...(originalLogin ? {replaces:originalLogin} : {}),
       ...(originalProfile ? {replacesProfile:originalProfile} : {}),
     };
@@ -2107,16 +2156,21 @@ export default function App(){
       <div className="w-full max-w-[440px] card p-6 sm:p-7 mt-7">
         <h1 className="font-extrabold text-[24px] leading-tight tracking-tight text-center">Bem-vindo</h1>
         <p className="text-[14px] text-[var(--muted)] text-center mt-2 leading-relaxed">Faça login para ver seu checklist</p>
-        <form className="mt-6" onSubmit={(ev)=>{ev.preventDefault(); handleLoginSubmit();}}>
+        <div className="flex gap-2 mt-4"><button type="button" onClick={()=>{setPinMode(false);setLoginError("");}} className={`flex-1 chip ${!pinMode?"active":""}`}>Login e senha</button><button type="button" onClick={()=>{setPinMode(true);setLoginError("");}} className={`flex-1 chip ${pinMode?"active":""}`}>PIN (aparelho compartilhado)</button></div>
+        {loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">Muitas tentativas. Aguarde {loginLockLeft}s</p>}
+        {loginError && !loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">{loginError}</p>}
+        {!pinMode ? <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void handleLoginSubmit();}}>
           <label className="block"><span className="text-[13px] font-bold">Login</span><input autoFocus autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={loginInput} onChange={e=>{setLoginInput(e.target.value); setLoginError("");}} placeholder="Ex.: wesley" className="field mt-2 !h-[56px] !text-[16px]" aria-label="Login"/></label>
           <label className="block mt-4"><span className="text-[13px] font-bold">Senha</span><div className="relative mt-2"><input type={showPassword?"text":"password"} autoComplete="current-password" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={passwordInput} onChange={e=>{setPasswordInput(e.target.value); setLoginError("");}} placeholder="Sua senha" className="field !h-[56px] !text-[16px] !pr-[52px]" aria-label="Senha"/><button type="button" onClick={()=>setShowPassword(!showPassword)} className="absolute right-2 top-1/2 -translate-y-1/2 w-10 h-10 grid place-items-center text-[var(--muted)]" aria-label={showPassword?"Ocultar senha":"Mostrar senha"}>{showPassword?<EyeOff size={20}/>:<Eye size={20}/>}</button></div></label>
           <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none"><input type="checkbox" checked={rememberMe} onChange={e=>setRememberMe(e.target.checked)} className="w-5 h-5 accent-[var(--primary)] shrink-0"/><span className="text-[14px] font-semibold">Lembrar de mim</span></label>
-          {loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">Muitas tentativas. Aguarde {loginLockLeft}s</p>}
-          {loginError && !loginLocked && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--danger-bg)] text-[var(--danger-text)] text-sm font-bold text-center">{loginError}</p>}
           <button type="submit" disabled={loginLocked} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar</button>
-          <p className="mt-3 text-center text-[12px] leading-relaxed text-[var(--muted)]">Acesso individual.</p>
-          <button type="button" onClick={()=>setQrOpen(true)} className="mt-4 w-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={18}/> QR do Dojo</button>
-        </form>
+        </form> : <form className="mt-5" onSubmit={(ev)=>{ev.preventDefault(); void loginByPin();}}>
+          <label className="block"><span className="text-[13px] font-bold">Pessoa</span><select value={pinLogin.profile} onChange={e=>{setPinLogin(p=>({...p,profile:e.target.value}));setLoginError("");}} className="field mt-2 !h-[56px]" aria-label="Pessoa no PIN"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></label>
+          <label className="block mt-4"><span className="text-[13px] font-bold">PIN de 6 dígitos</span><input autoFocus inputMode="numeric" value={pinLogin.pin} onChange={e=>{setPinLogin(p=>({...p,pin:e.target.value.replace(/\D/g,"").slice(0,6)}));setLoginError("");}} placeholder="000000" className="field mt-2 !h-[56px] !text-[22px] tracking-[0.4em]" aria-label="PIN" /></label>
+          <button type="submit" disabled={!pinLogin.profile||pinLogin.pin.length!==6} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-4 text-[16px] disabled:opacity-50">Entrar com PIN</button>
+          <p className="mt-2 text-center text-[12px] text-[var(--muted)]">Para aparelho compartilhado na unidade.</p>
+        </form>}
+        <button type="button" onClick={()=>setQrOpen(true)} className="mt-4 w-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-extrabold rounded-2xl py-3.5 text-[14px] flex items-center justify-center gap-2"><QrCode size={18}/> QR do Dojo</button>
       </div>
       {msg && <p role="status" className="mt-4 text-[13px] text-[var(--muted)] text-center max-w-[440px]">{msg}</p>}
       {offlineMode && <p className="mt-3 text-[12px] text-[var(--muted)] text-center">Modo offline - histórico local</p>}
@@ -2152,6 +2206,7 @@ export default function App(){
       <div className="mt-6">
         <p className="text-[13px] font-bold tracking-wide uppercase text-[var(--muted)]">Conferência</p>
         <h2 className="font-extrabold text-[26px] leading-tight mt-1">Hoje, {fmtDate(date)}</h2>
+        <div className="mt-3 flex items-center gap-2"><span className="text-[12px] font-bold text-[var(--muted)]">Unidade</span><select value={unitFilter} onChange={e=>setUnitFilter(e.target.value)} className="field !mt-0 !w-auto min-w-[150px]" aria-label="Filtrar por unidade"><option>Todas</option>{units.map(u=><option key={u}>{u}</option>)}</select>{unitFilter!=="Todas" && <span className="text-[12px] text-[var(--muted)]">Fuso: America/Sao_Paulo</span>}</div>
       </div>
       <section className="grid grid-cols-2 gap-3 mt-5" aria-label="Dashboard do dia">
         <div className="card p-4"><p className="text-[12px] font-bold text-[var(--muted)]">Hoje concluídos</p><p className="font-extrabold text-[clamp(26px,7vw,34px)] leading-tight mt-1">{completedSectionsToday} / {expectedSectionsToday}</p></div>
@@ -2171,7 +2226,7 @@ export default function App(){
         {isManager && <button onClick={()=>setRankingOpen(!rankingOpen)} aria-expanded={rankingOpen} className="flex-1 min-w-[170px] bg-[#FFC107] text-black font-extrabold rounded-2xl px-4 py-3.5 text-[14px] flex items-center justify-center gap-2">🏆 {rankingOpen ? "Ocultar Ranking da Semana" : "Ver Ranking da Semana"}</button>}
       </div>
       <div className="flex flex-wrap gap-2 mt-4"><button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} className="chip">↑ Conferência</button><button onClick={()=>document.getElementById("dash-equipe")?.scrollIntoView({behavior:"smooth",block:"start"})} className="chip">Equipe</button><button onClick={()=>document.getElementById("dash-qualidade")?.scrollIntoView({behavior:"smooth",block:"start"})} className="chip">Qualidade</button></div>
-      {isManager && rankingOpen && <section className="card p-5 mt-4" aria-label="Ranking da Semana"><h3 className="font-extrabold text-[18px]">🏆 Ranking da Semana</h3><p className="text-[13px] text-[var(--muted)] mt-1">Segunda a domingo · {fmtDate(weeklyRanking.weekStart)} a {fmtDate(weeklyRanking.weekEnd)} · % = Feito / Total da semana</p>{weeklyRanking.rows.filter(r=>r.total>0).length===0 ? <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Nenhum checklist concluído nesta semana ainda.</p> : <><div className="grid grid-cols-3 gap-2 mt-4">{weeklyRanking.rows.slice(0,3).map((r,i)=>{ const medal = i===0 ? "🥇" : i===1 ? "🥈" : "🥉"; return <div key={r.person} className="rounded-2xl bg-[var(--surface-2)] p-3 text-center"><div className="text-[26px] leading-none">{medal}</div><p className="font-extrabold text-[15px] mt-2 [overflow-wrap:anywhere]">{r.person}</p><p className="font-extrabold text-[20px] mt-1" style={{color:complianceColor(r.pct)}}>{r.pct}%</p><p className="text-[12px] text-[var(--muted)] mt-1">{r.checklists} checklist{r.checklists===1 ? "" : "s"}</p></div>; })}</div><ol className="mt-5 space-y-4">{weeklyRanking.rows.map((r,i)=><li key={r.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><div className="flex justify-between gap-2 items-baseline"><span className="font-bold text-[16px] [overflow-wrap:anywhere]">{i+1}º {r.person}</span><span className="text-[14px] font-extrabold shrink-0" style={{color:complianceColor(r.pct)}}>{r.pct}% • {r.checklists} checklist{r.checklists===1 ? "" : "s"}</span></div><div className="h-1.5 rounded-full bg-[var(--secondary-bg)] mt-2 overflow-hidden"><div className="h-full rounded-full" style={{width:`${r.pct}%`,background:complianceColor(r.pct)}} /></div><p className="text-[12px] text-[var(--muted)] mt-1.5">{r.feitos} feitos · {r.naoFeitos} não feitos · {r.total} itens marcados</p></li>)}</ol></>}</section>}
+      {isManager && rankingOpen && <section className="card p-5 mt-4" aria-label="Ranking da Semana"><h3 className="font-extrabold text-[18px]">🏆 Ranking da Semana</h3><p className="text-[13px] text-[var(--muted)] mt-1">Segunda a domingo · {fmtDate(weeklyRanking.weekStart)} a {fmtDate(weeklyRanking.weekEnd)} · % = Feito / Total da semana</p>{rankingRows.filter(r=>r.total>0).length===0 ? <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Nenhum checklist concluído nesta semana ainda.</p> : <><div className="grid grid-cols-3 gap-2 mt-4">{rankingRows.slice(0,3).map((r,i)=>{ const medal = i===0 ? "🥇" : i===1 ? "🥈" : "🥉"; return <div key={r.person} className="rounded-2xl bg-[var(--surface-2)] p-3 text-center"><div className="text-[26px] leading-none">{medal}</div><p className="font-extrabold text-[15px] mt-2 [overflow-wrap:anywhere]">{r.person}</p><p className="font-extrabold text-[20px] mt-1" style={{color:complianceColor(r.pct)}}>{r.pct}%</p><p className="text-[12px] text-[var(--muted)] mt-1">{r.checklists} checklist{r.checklists===1 ? "" : "s"}</p></div>; })}</div><ol className="mt-5 space-y-4">{rankingRows.map((r,i)=><li key={r.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0"><div className="flex justify-between gap-2 items-baseline"><span className="font-bold text-[16px] [overflow-wrap:anywhere]">{i+1}º {r.person}</span><span className="text-[14px] font-extrabold shrink-0" style={{color:complianceColor(r.pct)}}>{r.pct}% • {r.checklists} checklist{r.checklists===1 ? "" : "s"}</span></div><div className="h-1.5 rounded-full bg-[var(--secondary-bg)] mt-2 overflow-hidden"><div className="h-full rounded-full" style={{width:`${r.pct}%`,background:complianceColor(r.pct)}} /></div><p className="text-[12px] text-[var(--muted)] mt-1.5">{r.feitos} feitos · {r.naoFeitos} não feitos · {r.total} itens marcados</p></li>)}</ol></>}</section>}
       {weeklySummaryOpen && <section className="card p-5 mt-4" aria-label="Resumo da Semana"><h3 className="font-extrabold text-[18px]">Resumo da Semana</h3><p className="text-[13px] text-[var(--muted)] mt-1">Segunda a domingo · {fmtDate(weeklySummary.weekStart)} a {fmtDate(weeklySummary.weekEnd)}</p><ul className="mt-4 space-y-3 text-[14px] leading-relaxed"><li><b>Total de checklists concluídos na semana:</b> {weeklySummary.totalConcluded}</li><li><b>% Conformidade média da semana:</b> <span style={{color:complianceColor(weeklySummary.avgCompliance)}}>{weeklySummary.avgCompliance}%</span> <span className="text-[var(--muted)]">({weeklySummary.feitos} feitos · {weeklySummary.naoFeitos} não feitos)</span></li><li><b>Top 3 itens mais marcados como Não feito na semana:</b>{weeklySummary.top3.length===0 ? <span className="text-[var(--muted)]"> Nenhum item marcado como Não feito na semana.</span> : <ol className="mt-1 space-y-1 list-decimal pl-5">{weeklySummary.top3.map((t,i)=><li key={`${t.name}-${i}`} className="[overflow-wrap:anywhere]">{t.name} — {t.count}x</li>)}</ol>}</li><li><b>Pessoas com 100% na semana:</b>{weeklySummary.perfectPeople.length===0 ? <span className="text-[var(--muted)]"> Ninguém com 100% na semana.</span> : <span> {weeklySummary.perfectPeople.join(", ")}</span>}</li><li><b>Planos de Ação:</b> {weeklySummary.plansResolved} resolvidos / {weeklySummary.plansPending} pendentes</li></ul><button onClick={()=>setWeeklySummaryOpen(false)} className="mt-4 bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-bold rounded-xl px-4 py-3 text-[13px]">Fechar resumo</button></section>}
       {aiInsights && <section className="card p-5 mt-4"><h3 className="font-extrabold text-[17px] flex items-center gap-2"><Sparkles size={18} className="text-[var(--primary)]"/> Revisão da IA — {fmtDate(date)}</h3><ul className="mt-3 space-y-2">{aiInsights.map((t,i)=><li key={i} className="text-[14px] leading-relaxed [overflow-wrap:anywhere]">• {t}</li>)}</ul></section>}
       {isManager && <section id="dash-qualidade" className="card p-5 mt-4" aria-label="Validade e vencimento">
@@ -2190,7 +2245,7 @@ export default function App(){
       <section className="card p-5 mt-4">
         <h3 className="font-extrabold text-[18px]">Por pessoa — hoje</h3>
         <div className="flex flex-wrap gap-2 mt-3" role="group" aria-label="Filtrar por pessoa">{OVERVIEW_FILTER_PEOPLE.map(p=><button key={p} type="button" onClick={()=>setOverviewPerson(p)} className={`chip ${overviewPerson===p?"active":""}`}>{p}</button>)}</div>
-        <ul className="mt-4 space-y-4">{overviewFilteredPeople.map(p=><li key={p.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
+        <ul className="mt-4 space-y-4">{overviewFilteredPeople.filter(p=>unitFilter==="Todas"||unitOf(p.person)===unitFilter).map(p=><li key={p.person} className="border-b border-[var(--line)] pb-4 last:border-0 last:pb-0">
           <div className="flex justify-between gap-2 items-baseline"><span className="font-bold text-[16px] [overflow-wrap:anywhere]">{p.person}</span><span className="text-[14px] font-extrabold shrink-0" style={{color:complianceColor(p.pct)}}>{p.feitos}/{p.total} — {p.pct}%</span></div>
           <div className="h-1.5 rounded-full bg-[var(--secondary-bg)] mt-2 overflow-hidden"><div className="h-full rounded-full" style={{width:`${p.pct}%`,background:complianceColor(p.pct)}} /></div>
           <p className="text-[12px] text-[var(--muted)] mt-1.5">Iniciado {p.shift?.startedAt||"—"} • Concluído {p.shift?.finishedAt||"—"}</p>
@@ -2206,6 +2261,8 @@ export default function App(){
           <label className="block"><span className="text-[13px] font-bold">Estação / setor</span><input value={staffForm.station||""} onChange={e=>setStaffForm(p=>({...p,station:e.target.value}))} placeholder="Ex.: Cozinha Quente" className="field mt-1.5" aria-label="Estação do funcionário" /></label>
           <label className="block"><span className="text-[13px] font-bold">Grupo do chat</span><select value={staffForm.group||""} onChange={e=>setStaffForm(p=>({...p,group:e.target.value}))} className="field mt-1.5" aria-label="Grupo do chat"><option value="">Sem grupo</option><option value="cozinha">Cozinha</option><option value="copa">Copa</option><option value="quiosque">Quiosque</option></select></label>
           <label className="block"><span className="text-[13px] font-bold">Turno</span><select value={staffForm.shift||"Manhã"} onChange={e=>setStaffForm(p=>({...p,shift:e.target.value}))} className="field mt-1.5" aria-label="Turno do funcionário"><option>Manhã</option><option>Tarde</option><option>Noite</option></select></label>
+          <label className="block"><span className="text-[13px] font-bold">Unidade</span><input value={staffForm.unit||"Matriz"} onChange={e=>setStaffForm(p=>({...p,unit:e.target.value}))} placeholder="Matriz" className="field mt-1.5" aria-label="Unidade do funcionário" /></label>
+          <label className="block"><span className="text-[13px] font-bold">PIN no aparelho compartilhado <span className="font-normal text-[var(--muted)]">(6 dígitos)</span></span><input value={staffForm.pin||""} onChange={e=>setStaffForm(p=>({...p,pin:e.target.value.replace(/\D/g,"").slice(0,6)}))} inputMode="numeric" placeholder="Opcional" className="field mt-1.5" aria-label="PIN do funcionário" /></label>
         </div>
         <div className="flex flex-wrap gap-2 mt-4"><button disabled={staffSaving} onClick={()=>void saveStaffRecord()} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3.5 text-[14px] disabled:opacity-50">{staffSaving ? "Salvando…" : staffEditingId ? "Salvar alterações" : "Cadastrar funcionário"}</button>{staffEditingId && <button onClick={resetStaffForm} className="bg-[var(--secondary-bg)] text-[var(--secondary-ink)] font-bold rounded-2xl px-5 py-3.5 text-[14px]">Cancelar edição</button>}</div>
         {staffMsg && <p role="status" className="mt-3 text-[13px] font-bold">{staffMsg}</p>}
@@ -2429,6 +2486,7 @@ export default function App(){
         </div>
         <button type="button" onClick={()=>setOnlyMissing(!onlyMissing)} aria-pressed={onlyMissing} className={`mt-4 w-full rounded-2xl py-3.5 text-[15px] font-extrabold pressable ${onlyMissing ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{onlyMissing ? "✓ Só o que falta" : "Só o que falta"}</button>
         <button type="button" disabled={readOnly} onClick={()=>setQuickEntryOpen(true)} className="mt-2 w-full rounded-2xl border border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] py-3.5 text-[14px] font-extrabold flex items-center justify-center gap-2 pressable"><Mic size={18}/> Falar ou anotar item</button>
+        <button type="button" disabled={readOnly} onClick={openSignature} className="mt-2 w-full rounded-2xl bg-[var(--surface-2)] border border-[var(--line)] text-[var(--ink)] py-3.5 text-[14px] font-extrabold flex items-center justify-center gap-2 pressable">✍️ Assinar turno{signatures.some(s=>s.value.profile===selected&&s.value.date===date) ? ` · ${signatures.find(s=>s.value.profile===selected&&s.value.date===date)!.value.time}` : ""}</button>
         <div className="flex flex-col gap-4 mt-5">
           <div className="block"><span className="text-[13px] font-bold text-[var(--muted)] flex items-center gap-1"><CalendarDays size={14}/> Data</span><div className="mt-2 flex items-center gap-2" aria-label="Navegar entre dias"><button type="button" onClick={()=>setDate(addDays(date,-1))} className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-[var(--secondary-bg)] text-[var(--secondary-ink)] grid place-items-center shrink-0" aria-label="Dia anterior"><ChevronLeft size={20}/></button><div className="flex-1 grid grid-cols-2 gap-1.5" role="group" aria-label="Ontem ou hoje">{([["Ontem",addDays(today(),-1)],["Hoje",today()]] as const).map(([label,val])=>(<button key={label} type="button" onClick={()=>setDate(val)} className={`min-h-[44px] rounded-full text-[13px] sm:text-[14px] font-extrabold px-1 ${date===val ? "bg-[var(--primary)] text-white" : "bg-[var(--secondary-bg)] text-[var(--secondary-ink)]"}`}>{label}</button>))}</div></div></div>
           {isManager ? <div className="grid grid-cols-2 gap-3 text-[13px]"><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Perfil</span><b>{perfil}</b></div><div className="rounded-xl bg-[var(--surface-2)] p-3"><span className="block text-[11px] font-bold uppercase tracking-wide text-[var(--muted)]">Turno</span><b>{turno}</b></div></div> : <><label className="block"><span className="text-[13px] font-bold text-[var(--muted)]">Perfil</span><select className="field mt-2" value={perfil} onChange={e=>setPerfil(e.target.value)}><option>Fraco</option><option>Normal</option><option>Forte</option></select></label>
@@ -2676,6 +2734,14 @@ export default function App(){
         <p className="text-[11px] text-[var(--muted)] mt-1 [overflow-wrap:anywhere]">{appLink}</p>
         <button onClick={()=>setQrOpen(false)} className="w-full mt-5 bg-[var(--primary)] text-white font-extrabold rounded-2xl py-3.5 text-[15px]">Fechar</button>
       </div></div>
+    </div>}
+    {signatureOpen && <div className="fixed inset-0 z-[68] bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4" role="dialog" aria-modal="true" aria-label="Assinatura do turno">
+      <div className="w-full sm:max-w-[520px] card p-5 sheet rounded-b-none sm:rounded-2xl">
+        <div className="flex items-start justify-between gap-2"><div><p className="text-[12px] font-bold uppercase text-[var(--muted)]">Assinatura</p><h2 className="font-extrabold text-[21px] mt-1">Assinar turno — {selected}</h2></div><button onClick={()=>setSignatureOpen(false)} aria-label="Fechar assinatura" className="w-10 h-10 grid place-items-center rounded-full bg-[var(--surface-2)] pressable"><X size={18}/></button></div>
+        <p className="text-[13px] text-[var(--muted)] mt-2">Desenhe sua assinatura com o dedo ou o mouse.</p>
+        <canvas ref={signatureCanvasRef} width={900} height={320} onPointerDown={sigDown} onPointerMove={sigMove} onPointerUp={sigUp} onPointerCancel={sigUp} className="w-full h-[180px] bg-white rounded-2xl border border-[var(--line)] mt-3 touch-none" aria-label="Área da assinatura" />
+        <div className="flex gap-2 mt-3"><button onClick={clearSignature} className="flex-1 bg-[var(--surface-2)] text-[var(--ink)] font-bold py-3 rounded-2xl">Limpar</button><button onClick={()=>void saveSignature()} className="flex-1 bg-[var(--primary)] text-white font-extrabold py-3 rounded-2xl">Salvar assinatura</button></div>
+      </div>
     </div>}
     {authUser && photoViewer && <div className="fixed inset-0 z-[60] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-label={`Foto — ${photoViewer.label}`}>
       <div className="w-full max-w-[620px] sheet">
