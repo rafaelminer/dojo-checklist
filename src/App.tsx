@@ -21,10 +21,15 @@ type CredentialRecord = { login: string; profile: string; password: string; stat
 type TempEntry = { profile: string; date: string; fria: string; freezer: string };
 type ShiftEntry = { profile: string; date: string; startedAt: string; startedBy: string; finishedAt?: string; finishedBy?: string };
 type RecordRow = { id: string; value: any };
-type TaskRecord = { title: string; owner: string; dueDate: string; dueTime: string; status: "Aberta" | "Concluída"; notes?: string; createdAt: string; createdBy: string };
+type TaskRecord = { title: string; owner: string; dueDate: string; dueTime: string; status: "Aberta" | "Concluída"; notes?: string; createdAt: string; createdBy: string; days?: number[] };
 type LogbookRecord = { date: string; shift: string; text: string; author: string; time: string };
 type TrainingRecord = { title: string; person: string; status: "Pendente" | "Concluído" | "Aprovado"; score?: string; approvedBy?: string; createdAt: string };
 type InstructionRecord = { itemId: string; text: string };
+type StockItemRecord = { item: string; category: string; expected: string; min: string; max: string; unit: string; createdAt: string };
+type StockCountRecord = { date: string; item: string; expected: number; counted: number; difference: number; profile: string; time: string };
+type ReceivingRecord = { date: string; supplier: string; invoice: string; item: string; expectedQty: string; receivedQty: string; status: "Conferido" | "Divergente"; notes: string; profile: string; time: string };
+type TempLimitRecord = { key: "fria" | "freezer"; min: number; max: number };
+type ItemRuleRecord = { itemId: string; requirePhoto: boolean };
 type Tab = "overview" | "checklist" | "chat" | "modules";
 type ChecklistRecord = { profile: string; date: string; title: string; turno?: string; perfil?: string };
 type ChecklistItemRecord = { checklistId?: string; itemId?: string; name: string; target?: string; section?: string; freq?: string; photo_url?: string; photo?: string };
@@ -386,6 +391,11 @@ export default function App(){
   const [logbook,setLogbook]=useState<{id:string,value:LogbookRecord}[]>([]);
   const [trainings,setTrainings]=useState<{id:string,value:TrainingRecord}[]>([]);
   const [instructions,setInstructions]=useState<{id:string,value:InstructionRecord}[]>([]);
+  const [stockItems,setStockItems]=useState<{id:string,value:StockItemRecord}[]>([]);
+  const [stockCounts,setStockCounts]=useState<{id:string,value:StockCountRecord}[]>([]);
+  const [receivings,setReceivings]=useState<{id:string,value:ReceivingRecord}[]>([]);
+  const [tempLimits,setTempLimits]=useState<{id:string,value:TempLimitRecord}[]>([]);
+  const [itemRules,setItemRules]=useState<{id:string,value:ItemRuleRecord}[]>([]);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
   const [auxForm,setAuxForm]=useState<Record<string,string>>({});
   const [staffForm,setStaffForm]=useState<Record<string,string>>({});
@@ -726,18 +736,28 @@ export default function App(){
 
   async function reloadAux(){
     try{
-      const [t,l,tr,ii,rd] = await Promise.all([
+      const [t,l,tr,ii,rd,si,sc,rc,tl,ir] = await Promise.all([
         api("records.list",{collection:"dojo_tasks",limit:200}),
         api("records.list",{collection:"dojo_logbook",limit:200}),
         api("records.list",{collection:"dojo_trainings",limit:200}),
         api("records.list",{collection:"dojo_item_instructions",limit:500}),
         api("records.list",{collection:"dojo_chat_reads",limit:500}),
+        api("records.list",{collection:"dojo_stock_items",limit:500}),
+        api("records.list",{collection:"dojo_stock_counts",limit:500}),
+        api("records.list",{collection:"dojo_receivings",limit:500}),
+        api("records.list",{collection:"dojo_temp_limits",limit:50}),
+        api("records.list",{collection:"dojo_item_rules",limit:500}),
       ]);
       setTasks((t.records||[]) as any);
       setLogbook((l.records||[]) as any);
       setTrainings((tr.records||[]) as any);
       setInstructions((ii.records||[]) as any);
       setReads((rd.records||[]) as any);
+      setStockItems((si.records||[]) as any);
+      setStockCounts((sc.records||[]) as any);
+      setReceivings((rc.records||[]) as any);
+      setTempLimits((tl.records||[]) as any);
+      setItemRules((ir.records||[]) as any);
     }catch{}
   }
   useEffect(()=>{ if(authUser) void reloadAux(); },[authUser]);
@@ -1358,6 +1378,9 @@ export default function App(){
     if(status==="Feito"){
       const deps = pendingDeps(item.id);
       if(deps.length){ setMsg(`Antes de ${item.name}, marque como Feito: ${deps.map(d=>d.name).join(", ")}.`); return; }
+      if(itemRules.find(r=>r.value.itemId===item.id)?.value.requirePhoto && !entryFor(item.id).photo){
+        setMsg(`Foto obrigatória em ${item.name} antes de marcar como Feito.`); return;
+      }
     }
     const cur=entryFor(item.id);
     if(cur.status===""){ void ensureShiftStarted(); }
@@ -1425,8 +1448,10 @@ export default function App(){
 
   const friaNum = parseTempValue(tempFria);
   const freezerNum = parseTempValue(tempFreezer);
-  const friaOut = friaNum!==null && (friaNum<0 || friaNum>5);
-  const freezerOut = freezerNum!==null && freezerNum>=-12;
+  const friaLim = tempLimits.find(r=>r.value.key==="fria")?.value || {key:"fria" as const,min:0,max:5};
+  const freezerLim = tempLimits.find(r=>r.value.key==="freezer")?.value || {key:"freezer" as const,min:-30,max:-12};
+  const friaOut = friaNum!==null && (friaNum<friaLim.min || friaNum>friaLim.max);
+  const freezerOut = freezerNum!==null && (freezerNum<freezerLim.min || freezerNum>freezerLim.max);
   const anyTempOut = friaOut || freezerOut;
 
   async function persistTemp(nextFria:string, nextFreezer:string){
@@ -1734,6 +1759,53 @@ export default function App(){
     if(t.status==="Concluída") return false;
     return `${t.dueDate}T${t.dueTime||"23:59"}` < nowLocalString();
   }
+  function tempLimitFor(key:"fria"|"freezer"){ return tempLimits.find(r=>r.value.key===key)?.value; }
+  async function saveStockItem(){
+    if(!isManager){ setMsg("Somente a Gerência cadastra itens de estoque."); return; }
+    const item = String(auxForm.stockItem||"").trim();
+    if(!item){ setMsg("Informe o item."); return; }
+    const value:StockItemRecord = { item, category:String(auxForm.stockCategory||"Geral").trim(), expected:String(auxForm.stockExpected||"").trim(), min:String(auxForm.stockMin||"").trim(), max:String(auxForm.stockMax||"").trim(), unit:String(auxForm.stockUnit||"un").trim(), createdAt:new Date().toISOString() };
+    try{ await api("records.create",{collection:"dojo_stock_items",value}); setAuxForm({}); await reloadAux(); setMsg("Item de estoque cadastrado."); }catch{ setMsg("Não foi possível cadastrar o item."); }
+  }
+  async function saveStockCount(row:{id:string;value:StockItemRecord}, countedRaw:string){
+    const counted = parseFloat(countedRaw.replace(",","."));
+    const expected = parseFloat(String(row.value.expected||"0").replace(",","."));
+    if(!Number.isFinite(counted)){ setMsg("Informe a quantidade contada."); return; }
+    const value:StockCountRecord = { date, item:row.value.item, expected:Number.isFinite(expected)?expected:0, counted, difference:counted-(Number.isFinite(expected)?expected:0), profile:authUser||"", time:nowTime() };
+    try{ await api("records.create",{collection:"dojo_stock_counts",value}); setAuxForm(p=>({...p,[`count-${row.id}`]:""})); await reloadAux(); setMsg(`Contagem de ${row.value.item} salva.`); }catch{ setMsg("Não foi possível salvar a contagem."); }
+  }
+  async function saveReceiving(){
+    const item = String(auxForm.receivingItem||"").trim();
+    if(!item){ setMsg("Informe o item recebido."); return; }
+    const expectedQty = String(auxForm.receivingExpected||"").trim();
+    const receivedQty = String(auxForm.receivingReceived||"").trim();
+    const divergente = expectedQty && receivedQty && parseFloat(expectedQty.replace(",","."))!==parseFloat(receivedQty.replace(",","."));
+    const value:ReceivingRecord = { date, supplier:String(auxForm.receivingSupplier||"").trim(), invoice:String(auxForm.receivingInvoice||"").trim(), item, expectedQty, receivedQty, status:divergente?"Divergente":"Conferido", notes:String(auxForm.receivingNotes||"").trim(), profile:authUser||"", time:nowTime() };
+    try{ await api("records.create",{collection:"dojo_receivings",value}); setAuxForm({}); await reloadAux(); setMsg(divergente?"Divergência registrada no recebimento.":"Recebimento conferido."); }catch{ setMsg("Não foi possível salvar o recebimento."); }
+  }
+  async function saveTempLimit(key:"fria"|"freezer"){
+    if(!isManager){ setMsg("Somente a Gerência configura limites."); return; }
+    const min = parseFloat(String(auxForm[`tempMin-${key}`]||"").replace(",","."));
+    const max = parseFloat(String(auxForm[`tempMax-${key}`]||"").replace(",","."));
+    if(!Number.isFinite(min)||!Number.isFinite(max)){ setMsg("Informe mínimo e máximo."); return; }
+    const existing = tempLimits.find(r=>r.value.key===key);
+    const value:TempLimitRecord = { key, min, max };
+    try{
+      if(existing) await api("records.replace",{collection:"dojo_temp_limits",id:existing.id,value});
+      else await api("records.create",{collection:"dojo_temp_limits",value});
+      await reloadAux(); setMsg(`Limite de ${key==="fria"?"câmara fria":"freezer"} salvo.`);
+    }catch{ setMsg("Não foi possível salvar o limite."); }
+  }
+  async function togglePhotoRule(itemId:string){
+    if(!isManager){ setMsg("Somente a Gerência configura regras."); return; }
+    const existing = itemRules.find(r=>r.value.itemId===itemId);
+    const value:ItemRuleRecord = { itemId, requirePhoto: !existing?.value.requirePhoto };
+    try{
+      if(existing) await api("records.replace",{collection:"dojo_item_rules",id:existing.id,value});
+      else await api("records.create",{collection:"dojo_item_rules",value});
+      await reloadAux();
+    }catch{ setMsg("Não foi possível salvar a regra."); }
+  }
   function fillHandover(){
     const parts:string[]=[];
     const pend = activeSections.flatMap(sec=>countsForSection(sec).list.filter(i=>entryFor(i.id).status!=="Feito").map(i=>`${i.name} (${sec})`));
@@ -1756,7 +1828,7 @@ export default function App(){
     const title = String(auxForm.taskTitle||"").trim();
     const owner = String(auxForm.taskOwner||"").trim();
     if(!title || !owner){ setMsg("Preencha tarefa e responsável."); return; }
-    const value:TaskRecord = { title, owner, dueDate:String(auxForm.taskDate||date), dueTime:String(auxForm.taskTime||"18:00"), status:"Aberta", notes:String(auxForm.taskNotes||"").trim(), createdAt:new Date().toISOString(), createdBy:authUser||"" };
+    const value:TaskRecord = { title, owner, dueDate:String(auxForm.taskDate||date), dueTime:String(auxForm.taskTime||"18:00"), status:"Aberta", notes:String(auxForm.taskNotes||"").trim(), createdAt:new Date().toISOString(), createdBy:authUser||"", days:String(auxForm.taskDays||"").split(",").filter(Boolean).map(Number) };
     try{
       await api("records.create",{collection:"dojo_tasks",value});
       await notifyMessage({profile:owner,sender:"Gerência",text:`📌 Nova tarefa: ${title} — até ${fmtDate(value.dueDate)} ${value.dueTime}.`});
@@ -1911,6 +1983,8 @@ export default function App(){
       setMsg("Ouvindo… fale o item e a quantidade.");
     }catch{ setListening(false); setMsg("Não foi possível iniciar o microfone."); }
   }
+  const weekdayToday = new Date().getDay();
+  const taskApplies = (t:TaskRecord) => !t.days?.length || t.days.includes(weekdayToday);
   const pendingSection = activeSections.find(s=>{ const sub2=submissionForSection(s); const locked2=!!sub2 && (sub2.value.status==="Aguardando" || sub2.value.status==="Aprovado"); return !locked2; });
   const pendingSectionCounts = pendingSection ? countsForSection(pendingSection) : null;
   const latestHandover = useMemo(()=>{
@@ -2051,6 +2125,34 @@ export default function App(){
         <p className="text-[13px] text-[var(--muted)] mt-1">Gere um QR para cada estação e cole no posto: abre o app com o login da pessoa preenchido.</p>
         <div className="flex flex-wrap gap-2 mt-3">{staffProfiles.map(p=><button key={p} type="button" onClick={()=>openStationQr(p)} className="chip"><QrCode size={13}/>{p}</button>)}</div>
       </section>
+      <section className="card p-5 mt-4" aria-label="Estoque e recebimento">
+        <h3 className="font-extrabold text-[18px]">Estoque e recebimento</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Cadastre itens com saldo esperado, mínimo e máximo. A equipe conta e confere o recebimento.</p>
+        <div className="grid gap-3 mt-4 sm:grid-cols-3">
+          <input value={auxForm.stockItem||""} onChange={e=>setAuxForm(p=>({...p,stockItem:e.target.value}))} placeholder="Item" className="field" aria-label="Item de estoque" />
+          <input value={auxForm.stockCategory||""} onChange={e=>setAuxForm(p=>({...p,stockCategory:e.target.value}))} placeholder="Categoria" className="field" aria-label="Categoria do item" />
+          <input value={auxForm.stockExpected||""} onChange={e=>setAuxForm(p=>({...p,stockExpected:e.target.value}))} placeholder="Esperado" className="field" aria-label="Saldo esperado" />
+          <input value={auxForm.stockMin||""} onChange={e=>setAuxForm(p=>({...p,stockMin:e.target.value}))} placeholder="Mínimo" className="field" aria-label="Estoque mínimo" />
+          <input value={auxForm.stockMax||""} onChange={e=>setAuxForm(p=>({...p,stockMax:e.target.value}))} placeholder="Máximo" className="field" aria-label="Estoque máximo" />
+          <input value={auxForm.stockUnit||"un"} onChange={e=>setAuxForm(p=>({...p,stockUnit:e.target.value}))} placeholder="Unidade" className="field" aria-label="Unidade do item" />
+        </div>
+        <button onClick={()=>void saveStockItem()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[13px]">Cadastrar item</button>
+        <ul className="mt-4 space-y-2">{stockItems.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum item cadastrado.</li> : stockItems.map(r=><li key={r.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1">{r.value.item}</span><span className="text-[12px] text-[var(--muted)]">{r.value.category} · esperado {r.value.expected||"—"} {r.value.unit}</span></li>)}</ul>
+        <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Recebimentos de hoje</p>
+        <ul className="mt-2 space-y-2">{receivings.filter(r=>r.value.date===date).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum recebimento hoje.</li> : receivings.filter(r=>r.value.date===date).map(r=><li key={r.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{r.value.item} · {r.value.supplier||"sem fornecedor"}</p><p className="text-[12px] text-[var(--muted)]">Nota {r.value.invoice||"—"} · esperado {r.value.expectedQty||"—"} · recebido {r.value.receivedQty||"—"} · <b className={r.value.status==="Divergente"?"text-[var(--danger-text)]":"text-[var(--success-text)]"}>{r.value.status}</b></p></li>)}</ul>
+      </section>
+      <section className="card p-5 mt-4" aria-label="Temperatura e limites">
+        <h3 className="font-extrabold text-[18px]">Temperatura — limites e histórico</h3>
+        <div className="grid gap-3 mt-4 sm:grid-cols-2">{(["fria","freezer"] as const).map(k=><div key={k} className="rounded-xl bg-[var(--surface-2)] p-3"><p className="text-[13px] font-extrabold capitalize">{k==="fria"?"Câmara fria":"Freezer"}</p><div className="flex gap-2 mt-2"><input type="number" value={auxForm[`tempMin-${k}`] ?? String(tempLimitFor(k)?.min ?? "")} onChange={e=>setAuxForm(p=>({...p,[`tempMin-${k}`]:e.target.value}))} placeholder="Mín." className="field !mt-0" aria-label={`Mínimo ${k}`} /><input type="number" value={auxForm[`tempMax-${k}`] ?? String(tempLimitFor(k)?.max ?? "")} onChange={e=>setAuxForm(p=>({...p,[`tempMax-${k}`]:e.target.value}))} placeholder="Máx." className="field !mt-0" aria-label={`Máximo ${k}`} /></div><button onClick={()=>void saveTempLimit(k)} className="mt-2 bg-[var(--secondary-bg)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Salvar limite</button></div>)}</div>
+        <p className="text-[12px] font-bold uppercase text-[var(--muted)] mt-4">Últimos 7 dias — {selected}</p>
+        <div className="flex items-end gap-2 mt-3 h-[100px]">{Array.from({length:7},(_,i)=>addDays(date,-(6-i))).map(d=>{ const v=temps[`${selected}|${d}`]?.value; const n=parseTempValue(v?.fria||""); const h=n===null?0:Math.min(100,Math.max(6,Math.round((n+10)/20*100))); return <div key={d} className="flex-1 flex flex-col items-center gap-1"><div className="w-full rounded-t-lg bg-[var(--primary)]" style={{height:`${h}%`}} title={n===null?"sem registro":`${n} °C`} /><span className="text-[10px] text-[var(--muted)]">{d.slice(8)}</span></div>; })}</div>
+      </section>
+      <section className="card p-5 mt-4" aria-label="Regras de qualidade">
+        <h3 className="font-extrabold text-[18px]">Regras de qualidade</h3>
+        <p className="text-[13px] text-[var(--muted)] mt-1">Exija foto antes de marcar um item como Feito.</p>
+        <div className="flex flex-wrap gap-2 mt-3"><select value={auxForm.ruleItem||""} onChange={e=>setAuxForm(p=>({...p,ruleItem:e.target.value}))} className="field flex-1 min-w-[200px]" aria-label="Item da regra"><option value="">Selecione o item</option>{(byProfile[selected||""]||ALL_ITEMS).map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button disabled={!auxForm.ruleItem} onClick={()=>void togglePhotoRule(auxForm.ruleItem!)} className="bg-[var(--primary)] text-white font-extrabold rounded-2xl px-4 py-3 text-[13px] disabled:opacity-50">{itemRules.find(r=>r.value.itemId===auxForm.ruleItem)?.value.requirePhoto?"Remover exigência":"Exigir foto"}</button></div>
+        <div className="flex flex-wrap gap-2 mt-3">{itemRules.filter(r=>r.value.requirePhoto).map(r=><span key={r.id} className="chip">{ALL_ITEMS.find(i=>i.id===r.value.itemId)?.name||r.value.itemId} 📷</span>)}</div>
+      </section>
       <section id="dash-equipe" className="card p-5 mt-4" aria-label="Tarefas avulsas">
         <h3 className="font-extrabold text-[18px]">Tarefas avulsas</h3>
         <p className="text-[13px] text-[var(--muted)] mt-1">Tarefa com responsável e prazo. Vencida, aparece em vermelho e a gerência é avisada.</p>
@@ -2059,9 +2161,10 @@ export default function App(){
           <label className="block"><span className="text-[13px] font-bold">Responsável</span><select value={auxForm.taskOwner||""} onChange={e=>setAuxForm(p=>({...p,taskOwner:e.target.value}))} className="field mt-1.5" aria-label="Responsável da tarefa"><option value="">Selecione</option>{staffProfiles.map(p=><option key={p}>{p}</option>)}</select></label>
           <label className="block"><span className="text-[13px] font-bold">Data</span><input type="date" value={auxForm.taskDate||date} onChange={e=>setAuxForm(p=>({...p,taskDate:e.target.value}))} className="field mt-1.5" aria-label="Data da tarefa" /></label>
           <label className="block"><span className="text-[13px] font-bold">Hora limite</span><input type="time" value={auxForm.taskTime||"18:00"} onChange={e=>setAuxForm(p=>({...p,taskTime:e.target.value}))} className="field mt-1.5" aria-label="Hora da tarefa" /></label>
+          <div className="sm:col-span-2"><span className="text-[13px] font-bold">Dias da semana <span className="font-normal text-[var(--muted)]">(vazio = todos)</span></span><div className="flex flex-wrap gap-1.5 mt-2">{["D","S","T","Q","Q","S","S"].map((d,i)=>{ const on=String(auxForm.taskDays||"").split(",").includes(String(i)); return <button key={i} type="button" aria-label={`Dia ${i}`} onClick={()=>{ const cur=String(auxForm.taskDays||"").split(",").filter(Boolean); const next=on?cur.filter(x=>x!==String(i)):[...cur,String(i)]; setAuxForm(p=>({...p,taskDays:next.sort((a,b)=>Number(a)-Number(b)).join(",")})); }} className={`w-9 h-9 rounded-full text-[12px] font-extrabold border ${on?"bg-[var(--primary)] text-white border-[var(--primary)]":"bg-[var(--surface-2)] text-[var(--muted)] border-[var(--line)]"}`}>{d}</button>; })}</div></div>
         </div>
         <button onClick={()=>void createTask()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[14px]">Criar tarefa</button>
-        <ul className="mt-4 space-y-2">{tasks.length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma tarefa avulsa.</li> : tasks.map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{row.value.owner} · {fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span>{row.value.status==="Aberta" ? <button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button> : <span className="text-[12px] font-bold text-[var(--success-text)]">Concluída</span>}</li>)}</ul>
+        <ul className="mt-4 space-y-2">{tasks.filter(r=>taskApplies(r.value)).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhuma tarefa avulsa.</li> : tasks.filter(r=>taskApplies(r.value)).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{row.value.owner} · {fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span>{row.value.status==="Aberta" ? <button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button> : <span className="text-[12px] font-bold text-[var(--success-text)]">Concluída</span>}</li>)}</ul>
       </section>
       <section className="card p-5 mt-4" aria-label="Logbook da gerência">
         <h3 className="font-extrabold text-[18px]">Logbook da gerência</h3>
@@ -2153,11 +2256,27 @@ export default function App(){
       {draftLabel && <div className="mt-5 p-3 rounded-2xl bg-[var(--success-bg)] border border-[var(--success-border)] text-sm font-semibold flex gap-2 items-center" role="status"><Check size={17} className="shrink-0 text-[var(--green)]"/>{draftLabel}<span className="text-[var(--muted)] font-normal">· Salvo automaticamente. Fecha e volta que está tudo aqui.</span></div>}
       <section className="mt-5 card p-5" aria-label="Minhas tarefas">
         <h3 className="font-extrabold text-[18px]">Minhas tarefas</h3>
-        {tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma tarefa pendente.</p> : <ul className="mt-3 space-y-2">{tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta").map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span><button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button></li>)}</ul>}
+        {tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta" && taskApplies(t.value)).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhuma tarefa pendente.</p> : <ul className="mt-3 space-y-2">{tasks.filter(t=>t.value.owner===authUser && t.value.status==="Aberta" && taskApplies(t.value)).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className={`font-bold text-[14px] flex-1 min-w-0 [overflow-wrap:anywhere] ${taskOverdue(row.value)?"text-[var(--danger-text)]":""}`}>{row.value.title}</span><span className="text-[12px] text-[var(--muted)]">{fmtDate(row.value.dueDate)} {row.value.dueTime}{taskOverdue(row.value)?" · ATRASADA":""}</span><button onClick={()=>void setTaskStatus(row,"Concluída")} className="bg-[var(--green)] text-white font-bold text-[12px] px-3 py-2 rounded-xl">Concluir</button></li>)}</ul>}
       </section>
       <section className="mt-4 card p-5" aria-label="Meus treinamentos">
         <h3 className="font-extrabold text-[18px]">Meus treinamentos</h3>
         {trainings.filter(t=>t.value.person===authUser).length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhum treinamento atribuído.</p> : <ul className="mt-3 space-y-2">{trainings.filter(t=>t.value.person===authUser).map(row=><li key={row.id} className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><span className="font-bold text-[14px] flex-1 min-w-0">{row.value.title}</span><span className="text-[12px] font-bold">{row.value.status}</span>{row.value.status==="Pendente" && <button onClick={()=>void setTrainingStatus(row,"Concluído")} className="bg-white text-black font-bold text-[12px] px-3 py-2 rounded-xl">Marcar concluído</button>}</li>)}</ul>}
+      </section>
+      <section className="mt-4 card p-5" aria-label="Contagem de estoque">
+        <h3 className="font-extrabold text-[18px]">Contagem de estoque</h3>
+        {stockItems.length===0 ? <p className="text-sm text-[var(--muted)] mt-3">Nenhum item de estoque cadastrado pela gerência.</p> : <ul className="mt-3 space-y-3">{stockItems.map(r=>{ const last=stockCounts.filter(c=>c.value.item===r.value.item).sort((a,b)=>b.value.date.localeCompare(a.value.date)||b.value.time.localeCompare(a.value.time))[0]?.value; return <li key={r.id} className="border-b border-[var(--line)] pb-3 last:border-0 last:pb-0"><p className="font-bold text-[15px]">{r.value.item} <span className="text-[12px] font-normal text-[var(--muted)]">· esperado {r.value.expected||"—"} {r.value.unit}</span></p><div className="flex gap-2 mt-2"><input type="number" inputMode="decimal" value={auxForm[`count-${r.id}`]||""} onChange={e=>setAuxForm(p=>({...p,[`count-${r.id}`]:e.target.value}))} placeholder="Contado" className="field !mt-0" aria-label={`Contado ${r.value.item}`} /><button onClick={()=>void saveStockCount(r,auxForm[`count-${r.id}`]||"")} className="bg-[var(--primary)] text-white font-extrabold text-[12px] px-3 py-2 rounded-xl shrink-0">Salvar</button></div>{last && <p className="text-[12px] mt-1 text-[var(--muted)]">Última: {last.counted} · diferença <b className={last.difference!==0?"text-[var(--danger-text)]":"text-[var(--success-text)]"}>{last.difference>0?"+":""}{last.difference}</b></p>}</li>; })}</ul>}
+      </section>
+      <section className="mt-4 card p-5" aria-label="Recebimento de mercadorias">
+        <h3 className="font-extrabold text-[18px]">Recebimento de mercadorias</h3>
+        <div className="grid gap-3 mt-3 sm:grid-cols-2">
+          <input value={auxForm.receivingItem||""} onChange={e=>setAuxForm(p=>({...p,receivingItem:e.target.value}))} placeholder="Item" className="field" aria-label="Item recebido" />
+          <input value={auxForm.receivingSupplier||""} onChange={e=>setAuxForm(p=>({...p,receivingSupplier:e.target.value}))} placeholder="Fornecedor" className="field" aria-label="Fornecedor" />
+          <input value={auxForm.receivingInvoice||""} onChange={e=>setAuxForm(p=>({...p,receivingInvoice:e.target.value}))} placeholder="Nota fiscal" className="field" aria-label="Nota fiscal" />
+          <input value={auxForm.receivingExpected||""} onChange={e=>setAuxForm(p=>({...p,receivingExpected:e.target.value}))} placeholder="Esperado" className="field" aria-label="Quantidade esperada" />
+          <input value={auxForm.receivingReceived||""} onChange={e=>setAuxForm(p=>({...p,receivingReceived:e.target.value}))} placeholder="Recebido" className="field" aria-label="Quantidade recebida" />
+        </div>
+        <button onClick={()=>void saveReceiving()} className="mt-3 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3 text-[13px]">Registrar recebimento</button>
+        <ul className="mt-3 space-y-2">{receivings.filter(r=>r.value.date===date && r.value.profile===authUser).length===0 ? <li className="text-[13px] text-[var(--muted)]">Nenhum recebimento seu hoje.</li> : receivings.filter(r=>r.value.date===date && r.value.profile===authUser).map(r=><li key={r.id} className="border-b border-[var(--line)] pb-2 last:border-0 last:pb-0"><p className="font-bold text-[14px]">{r.value.item} · {r.value.status}</p><p className="text-[12px] text-[var(--muted)]">{r.value.supplier||"—"} · nota {r.value.invoice||"—"} · {r.value.expectedQty||"—"} → {r.value.receivedQty||"—"}</p></li>)}</ul>
       </section>
       <div className="[&>section]:mt-4">{sharedProductionSection()}</div>
 
@@ -2203,7 +2322,7 @@ export default function App(){
           {isPistaSection && guideOpen[sec] && <div className="mt-3 card p-5 border border-[var(--warning)]"><p className="font-extrabold text-[16px]">Mapa da pista — guia visual</p><p className="text-[12px] text-[var(--muted)] mt-1">Confira a posição de cada item antes de concluir.</p><ul className="mt-4 space-y-3">{PISTA_GUIDE.map(g=><li key={g.label} className="leading-relaxed"><span className="block text-[13px] font-extrabold tracking-wide text-[var(--warning-text)]">{g.label}</span><span className="block text-[17px] font-bold leading-snug mt-1 [overflow-wrap:anywhere]">{g.items}</span></li>)}</ul></div>}
 
           <div className="mt-3 space-y-4">
-            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
+            {displayList.map((item,idx)=>{ const e=entryFor(item.id); const fs=freqStyle(item.freq); const feitoValue = e.status==="Não feito" ? 0 : toNonNegativeInt(e.feito); const feitoEnabled = e.status==="Feito"; const justText = justDraft[item.id] ?? e.justificativa ?? ""; const justPending = (e.status==="Não feito" || !!justOpen[item.id]) && !justText.trim(); const showJustBox = !readOnly && (e.status==="Não feito" || !!justOpen[item.id]); const deps = pendingDeps(item.id); const sug = suggestedFor(item); const needsPhoto = !!itemRules.find(r=>r.value.itemId===item.id)?.value.requirePhoto && !e.photo; return <article id={`item-${item.id}`} key={item.id} className={`card item-card p-5 sm:p-6 ${e.status==="Feito"?"is-done":e.status==="Não feito"?"is-miss":""}`} style={justPending?{background:"var(--danger-bg)",border:"2px solid var(--danger)"}:{}}>
               <div className="flex gap-3 items-start">
                 <span className="w-9 h-9 shrink-0 rounded-full grid place-items-center font-extrabold text-sm bg-[var(--surface-inset)] border border-[var(--line)]">{String(idx+1).padStart(2,"0")}</span>
                 <div className="min-w-0 flex-1">
@@ -2211,10 +2330,11 @@ export default function App(){
                   <h3 role="button" tabIndex={0} onClick={()=>setProductItem(item)} onKeyDown={ev=>{if(ev.key==="Enter") setProductItem(item);}} className="font-bold text-[21px] leading-snug mt-3 [overflow-wrap:anywhere] cursor-pointer hover:text-[var(--primary)]" title="Abrir ficha do produto"><span className={`strike-title ${e.status==="Feito"?"is-done":""}`}>{item.name}</span> <span className="text-[11px] font-bold text-[var(--muted)]">· ficha</span></h3>{item.detail&&<p className="text-[13px] text-[var(--muted)] mt-1 leading-relaxed">{item.detail}</p>}{instructions.find(i=>i.value.itemId===item.id)?.value?.text && <p className="mt-2 rounded-xl bg-[var(--surface-2)] border border-[var(--line)] p-3 text-[13px] leading-relaxed [overflow-wrap:anywhere]">📋 {instructions.find(i=>i.value.itemId===item.id)!.value.text}</p>}
                   {(!isKioskSelected || item.section==="Produção do Quiosque") && <p className="text-[12px] text-[var(--muted)] mt-2 leading-relaxed"><span className="font-bold tracking-wide">A PRODUZIR</span> · <span className="[overflow-wrap:anywhere]">{item.target}</span></p>}
                   {deps.length>0 && <p className="mt-2 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)] p-3 text-[13px] font-bold">⚠️ Faça antes: {deps.map(d=>d.name).join(" · ")}</p>}
+                  {needsPhoto && <p className="mt-2 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)] p-3 text-[13px] font-bold">📷 Foto obrigatória neste item</p>}
                   {sug && <div className="mt-2 flex flex-wrap items-center gap-2"><span className="text-[12px] font-bold text-[var(--muted)]">📈 Sugestão: {sug.value} un. ({sug.days} dias iguais)</span><button type="button" disabled={saving||locked||readOnly||!feitoEnabled} onClick={()=>void saveFeito(item,String(sug.value))} className="bg-[var(--surface-2)] border border-[var(--line)] text-[12px] font-extrabold px-3 py-2 rounded-xl disabled:opacity-50">Usar</button></div>}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 mt-4" role="group" aria-label={`Status de ${item.name}`}>{(["Feito","Não feito"] as const).map(s=><button key={s} disabled={saving||locked||readOnly||(s==="Feito"&&deps.length>0)} onClick={()=>{ haptic(); setStatus(item,s); }} className={`status-btn inline-flex items-center justify-center gap-1.5 ${e.status===s?"active":""}`} style={e.status===s?{background:s==="Feito"?"var(--green)":"var(--danger)"}:{}}>{s==="Feito"?<Check size={17} strokeWidth={3}/>:<X size={17} strokeWidth={3}/>} {s}</button>)}</div>
+              <div className="grid grid-cols-2 gap-2 mt-4" role="group" aria-label={`Status de ${item.name}`}>{(["Feito","Não feito"] as const).map(s=><button key={s} disabled={saving||locked||readOnly||(s==="Feito"&&(deps.length>0||needsPhoto))} onClick={()=>{ haptic(); setStatus(item,s); }} className={`status-btn inline-flex items-center justify-center gap-1.5 ${e.status===s?"active":""}`} style={e.status===s?{background:s==="Feito"?"var(--green)":"var(--danger)"}:{}}>{s==="Feito"?<Check size={17} strokeWidth={3}/>:<X size={17} strokeWidth={3}/>} {s}</button>)}</div>
               {(!isKioskSelected || item.section==="Produção do Quiosque") && <div className="mt-4">
                 <span className="text-[13px] font-bold text-[var(--muted)]">FEITO</span><Stepper value={feitoValue} disabled={!feitoEnabled||locked||readOnly} label={`Quantidade feita de ${item.name}`} onChange={(n)=>saveFeito(item,String(n))} />{!feitoEnabled && <p className="text-[12px] text-[var(--muted)] mt-1.5">{e.status==="Não feito" ? "Travado em 0 — item marcado como Não feito." : "Marque Feito para liberar a quantidade."}</p>}
               </div>}
@@ -2261,8 +2381,8 @@ export default function App(){
         <button type="button" onClick={()=>setTempOpen(!tempOpen)} aria-expanded={tempOpen} className="w-full flex items-center justify-between gap-2 text-left"><span className="font-extrabold text-[18px]">Line check de temperatura (opcional)</span><span className="text-[18px] shrink-0">{tempOpen ? "▾" : "▸"}</span></button>
         {tempOpen && <div>
         <div className="grid gap-4 mt-4 sm:grid-cols-2">
-          <label className="block"><span className="text-[13px] font-bold">Temp. Câmara Fria</span><span className="text-[12px] text-[var(--muted)]"> · faixa 0–5 °C</span><div className="flex items-center gap-2 mt-2"><input inputMode="decimal" value={tempFria} disabled={readOnly} onChange={e=>handleTempChange("fria",e.target.value)} placeholder="Ex.: 3" className="field !mt-0" aria-label="Temp. Câmara Fria em graus Celsius"/><span className="font-extrabold text-[16px] shrink-0">°C</span></div></label>
-          <label className="block"><span className="text-[13px] font-bold">Temp. Freezer</span><span className="text-[12px] text-[var(--muted)]"> · abaixo de -12 °C</span><div className="flex items-center gap-2 mt-2"><input inputMode="decimal" value={tempFreezer} disabled={readOnly} onChange={e=>handleTempChange("freezer",e.target.value)} placeholder="Ex.: -18" className="field !mt-0" aria-label="Temp. Freezer em graus Celsius"/><span className="font-extrabold text-[16px] shrink-0">°C</span></div></label>
+          <label className="block"><span className="text-[13px] font-bold">Temp. Câmara Fria</span><span className="text-[12px] text-[var(--muted)]"> · faixa {friaLim.min}–{friaLim.max} °C</span><div className="flex items-center gap-2 mt-2"><input inputMode="decimal" value={tempFria} disabled={readOnly} onChange={e=>handleTempChange("fria",e.target.value)} placeholder="Ex.: 3" className="field !mt-0" aria-label="Temp. Câmara Fria em graus Celsius"/><span className="font-extrabold text-[16px] shrink-0">°C</span></div></label>
+          <label className="block"><span className="text-[13px] font-bold">Temp. Freezer</span><span className="text-[12px] text-[var(--muted)]"> · faixa {freezerLim.min} a {freezerLim.max} °C</span><div className="flex items-center gap-2 mt-2"><input inputMode="decimal" value={tempFreezer} disabled={readOnly} onChange={e=>handleTempChange("freezer",e.target.value)} placeholder="Ex.: -18" className="field !mt-0" aria-label="Temp. Freezer em graus Celsius"/><span className="font-extrabold text-[16px] shrink-0">°C</span></div></label>
         </div>
         {anyTempOut && <p role="alert" className="mt-4 p-3 rounded-xl bg-[var(--warning-bg)] border border-[var(--warning)] text-[var(--warning-text)] text-sm font-bold leading-relaxed">⚠️ Temperatura fora da faixa - avisar Gerência{friaOut ? " · Câmara Fria fora de 0–5 °C" : ""}{freezerOut ? " · Freezer fora de abaixo de -12 °C" : ""}</p>}
         {tempSaving && <p className="text-[12px] text-[var(--muted)] mt-2">Salvando temperatura…</p>}
