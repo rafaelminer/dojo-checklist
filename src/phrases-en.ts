@@ -179,7 +179,7 @@ export const en: Record<string, string> = {
   "Responsável": "Owner",
   "Resposta:": "Answer:",
   "Resumo da Semana": "Weekly Summary",
-  "Revisão da IA": "AI review",
+  "Parecer automático": "Automatic summary",
   "Sair": "Sign out",
   "Salvando justificativa…": "Saving reason…",
   "Salvando temperatura…": "Saving temperature…",
