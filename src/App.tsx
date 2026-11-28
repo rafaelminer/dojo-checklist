@@ -2114,7 +2114,7 @@ export default function App(){
       </div>
     </nav>}
     {!isChatDetail && <footer className="max-w-6xl mx-auto px-4 sm:px-6 pb-[150px] pt-2 text-[12px] text-[var(--muted)] flex flex-wrap gap-3 justify-between"><span>{t("Dojo Checklist · Operação diária")}</span><span>{t("Estação no padrão")}</span></footer>}
-    </>}
+    </div></>}
     {handoverDialogOpen && pendingHandoverSection && <div className="fixed inset-0 z-50 overflow-y-auto pt-[max(1rem,var(--safe-area-inset-top))] pb-6 bg-black/70" role="dialog" aria-modal="true" aria-label={t("Passagem de turno")}>
       <div className="min-h-full flex items-center justify-center px-4"><div className="w-full max-w-[440px] card p-6">
         <h2 className="font-extrabold text-[22px] leading-tight">{t("Passagem de turno")}</h2>
