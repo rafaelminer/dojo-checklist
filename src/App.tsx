@@ -190,6 +190,12 @@ export default function App(){
   const [customItems,setCustomItems]=useState<{id:string;value:CustomItemsRecord}[]>([]);
   const [cameraQuestion,setCameraQuestion]=useState<string|null>(null);
   const [guidedOpen,setGuidedOpen]=useState(false);
+  const [guidedStep,setGuidedStep]=useState(0);
+  const [guidedSection,setGuidedSection]=useState("");
+  const [guidedAnswers,setGuidedAnswers]=useState<Record<string,any>>({});
+  const [guidedResult,setGuidedResult]=useState(false);
+  const [guidedSaving,setGuidedSaving]=useState(false);
+  const [guidedCameraOpen,setGuidedCameraOpen]=useState(false);
   const signatureCanvasRef=useRef<HTMLCanvasElement|null>(null);
   const drawingRef=useRef(false);
   const [reads,setReads]=useState<{id:string,value:{messageId:string;profile:string;at:string}}[]>([]);
@@ -303,6 +309,10 @@ export default function App(){
     customItems.forEach(r=>{ map[r.value.profile]=r.value.items; });
     return map;
   },[customItems]);
+  const guidedSectionOptions = useMemo(()=>["All sections",...activeSections.filter(Boolean)],[activeSections]);
+  const guidedActiveSection = guidedSection || guidedSectionOptions[0];
+  const guidedQs = questions.filter((q:any)=>q.value?.question&&(guidedActiveSection==="All sections"||q.value.section===guidedActiveSection));
+  const guidedSteps:any[] = guidedQs.map((q:any)=>({id:q.id,question:q.value.question,section:q.value.section||"Geral",type:q.value.type||"check",weight:Number(q.value.weight)||1,minScore:Number(q.value.minScore)||7.5,ref:q.value.referencePhoto||""}));
   const units = useMemo(()=> Array.from(new Set(["Matriz",...credentials.map(c=>c.value.unit).filter(Boolean)])) as string[], [credentials]);
   const staffProfiles = useMemo(()=> Array.from(new Set([...STAFF_PROFILES.filter(p=>!replacedProfiles.has(p)), ...credentials.map(c=>c.value.profile)])).filter(p=>p!=="Gerência"),[credentials,replacedProfiles]);
   const stationMap = useMemo<Record<string,string>>(()=> { const m={...STATIONS}; replacedProfiles.forEach(p=>delete m[p]); credentials.filter(c=>c.value.station).forEach(c=>{ m[c.value.profile]=c.value.station!; }); return m; },[credentials,replacedProfiles]);
