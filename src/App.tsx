@@ -673,6 +673,12 @@ export default function App(){
   };
   const guidedScore = guidedSteps.length? Math.round(guidedSteps.reduce((sum,st)=>sum+guidedScoreFor(st,guidedAnswers[st.id]||{})*(Number(st.weight)||1),0)/guidedSteps.reduce((sum,st)=>sum+(Number(st.weight)||1),0)*10)/10 : 0;
   const guidedVerdict = guidedScore>=7.5?"Conforme":guidedScore>=5?"Parcialmente conforme":"Não conforme";
+  const saveGuidedRun = async ()=>{
+    if(!guidedSteps.length) return;
+    setGuidedSaving(true);
+    const value = { profile:selected||authUser||"", date, score:guidedScore, verdict:guidedVerdict, section:guidedActiveSection, answers:guidedAnswers, answersList:guidedSteps.map(st=>({id:st.id,question:st.question,section:st.section,type:st.type,weight:st.weight,score:guidedScoreFor(st,guidedAnswers[st.id]||{}),verdict:(guidedAnswers[st.id]||{}).verdict||"",answer:(guidedAnswers[st.id]||{}).answer||"",photo:(guidedAnswers[st.id]||{}).photo||""})) };
+    try{ await api("records.create",{collection:"dojo_guided_runs",value,idempotency_key:`dojo-guided-${normalizeLogin(selected||authUser||"")}-${date}-${Date.now()}`}); setGuidedSaving(false); setGuidedResult(true); setOfflineMode(false); }catch{ setGuidedSaving(false); setGuidedResult(true); setOfflineMode(true); }
+  };
   const itemsForSection = (sec:Section) => items.filter(i=> i.section===sec && (sec!=="Produção" || isKioskSelected || i.freq===period));
   const submissionForSection = (sec:Section) => {
     return Object.values(submissions).filter(s=>s.value.profile===selected && s.value.date===date && s.value.section===sec && (sec!=="Produção" || s.value.period===period)).sort((a,b)=>b.id.localeCompare(a.id))[0] || null;
