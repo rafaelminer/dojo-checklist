@@ -2060,7 +2060,8 @@ export default function App(){
         {navItems.map(n=>{ const active=tab===n.id; return <button key={n.id} onClick={()=>{setTab(n.id); setShowTodayDone(false); if(n.id!=="chat") setConversation(null);}} className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold ${active?"bg-[var(--primary)] text-white":"hover:bg-[var(--line)]"}`}><n.icon size={16}/>{n.label}</button>; })}
         {isManager && <><p className="px-2 mt-4 text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)] mb-1">Gerência</p>
         {dashNav.map(d=>{ const active=tab==="overview"&&dashTab===d.id; return <button key={d.id} onClick={()=>{setTab("overview"); setDashTab(d.id);}} className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold ${active?"bg-[var(--primary)] text-white":"hover:bg-[var(--line)]"}`}><d.icon size={16}/>{d.label}</button>; })}</>}
-        {/*SIDB2*/}
+        {!isManager && <button onClick={()=>{setGuidedOpen(true); setTab("checklist");}} className="mt-4 flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold text-white" style={{background:"#FF6B1A"}}><Sparkles size={16}/>Modo guiado</button>}
+        <div className="mt-auto pt-4"><button onClick={handleLogout} className="w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold text-[var(--muted)] hover:bg-[var(--line)]">{t("Sair")}</button></div>
       </aside><div className="lg:pl-[248px]">
     {!isChatDetail && <header data-safe-area-sticky-top style={{top:"var(--safe-area-inset-top)"}} className="app-header sticky z-30 border-b border-[var(--line)]">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
@@ -2109,7 +2110,7 @@ export default function App(){
         {pendingSection ? <button disabled={saving || (pendingSectionCounts?.pending||0)>0} onClick={()=>completeSectionFor(pendingSection)} className="shrink-0 bg-[var(--primary)] text-white font-extrabold rounded-2xl px-5 py-3.5 text-[15px] disabled:opacity-50 pressable">{t("Concluir")}<span className="hidden sm:inline">{displaySectionTitle(pendingSection)}</span><span className="sm:hidden">seção</span></button> : <button onClick={goToChatForCurrent} className="shrink-0 bg-white text-black font-extrabold rounded-2xl px-5 py-3.5 text-[15px] pressable">{t("Ir para o Chat →")}</button>}
       </div>
     </div>}
-    {!isChatDetail && !reproveFor && <nav className="fixed bottom-0 inset-x-0 z-30 bg-[var(--bg)] border-t border-[var(--line)] h-[calc(72px+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)]">
+    {!isChatDetail && !reproveFor && <nav className="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-[var(--bg)] border-t border-[var(--line)] h-[calc(72px+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)]">
       <div className={`max-w-6xl mx-auto px-4 grid h-full ${navItems.length===4?"grid-cols-4":"grid-cols-3"}`}>
         {navItems.map(t=>{
           const Icon=t.icon; const active=tab===t.id;
