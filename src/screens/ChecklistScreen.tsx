@@ -9,6 +9,7 @@ export default function ChecklistScreen(props: any) {
   return <>
     {tab==="checklist" && !isManager && <main className="max-w-6xl mx-auto px-4 sm:px-6 pb-[220px] tab-transition">
       {draftLabel && <div className="mt-5 p-3 rounded-2xl bg-[var(--success-bg)] border border-[var(--success-border)] text-sm font-semibold flex gap-2 items-center" role="status"><Check size={17} className="shrink-0 text-[var(--green)]"/>{draftLabel}<span className="text-[var(--muted)] font-normal">{t("· Salvo automaticamente. Fecha e volta que está tudo aqui.")}</span></div>}
+      <button type="button" onClick={()=>setGuidedOpen(true)} className="mt-5 w-full rounded-2xl bg-[var(--primary)] text-white font-extrabold py-4 text-[15px] flex items-center justify-center gap-2 pressable"><ClipboardCheck size={18}/>{t("Executar no modo guiado")}<span className="text-[12px] font-bold opacity-80">· uma pergunta por tela, com nota e foto</span></button>
       <div className="flex gap-2 mt-4"><button type="button" onClick={()=>setOpenSections(Object.fromEntries(activeSections.map(s=>[s,true])))} className="chip">Abrir todas as seções</button><button type="button" onClick={()=>setOpenSections(Object.fromEntries(activeSections.map(s=>[s,false])))} className="chip">Fechar todas</button></div>
       <section className="mt-5 card p-5" aria-label={t("Minhas tarefas")}>
         <h3 className="font-extrabold text-[18px]">{t("Minhas tarefas")}</h3>

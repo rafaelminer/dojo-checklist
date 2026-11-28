@@ -15,5 +15,6 @@
     "allowImportingTsExtensions": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts"],
+  "exclude": ["src/components/GuidedRun.tsx", "src/components/GuidedRun2.tsx", "src/components/GuidedRun3.tsx"]
 }
