@@ -2051,9 +2051,17 @@ export default function App(){
 
   const isChatDetail = tab==="chat" && !!conversation;
   const navItems = [{id:"checklist" as Tab,label:t("navChecklist"),icon:ClipboardCheck},{id:"chat" as Tab,label:t("navChat"),icon:MessageCircle},{id:"overview" as Tab,label:t("navOverview"),icon:LayoutDashboard},{id:"modules" as Tab,label:t("navModules"),icon:CalendarDays}].filter(t=> isManager ? t.id!=="checklist" : t.id!=="overview");
+  const dashNav = [{id:"conferencia" as const,label:t("Conferência"),icon:ClipboardCheck},{id:"equipe" as const,label:t("Equipe"),icon:MessageCircle},{id:"qualidade" as const,label:t("Qualidade"),icon:Sparkles}];
 
   return <Suspense fallback={<div className="min-h-[100dvh] grid place-items-center text-[13px] font-bold text-[var(--muted)]">Carregando…</div>}><div data-safe-area-inset-root className="app-shell overflow-x-clip" style={{boxSizing:"border-box",paddingTop:"var(--safe-area-inset-top)",minHeight:"100dvh"}}>
-    {!authUser ? loginContent : <><aside className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 w-[248px] flex-col bg-[var(--surface)] border-r border-[var(--line)] p-4 overflow-y-auto">{/*SIDEBAR*/}</aside><div className="lg:pl-[248px]">
+    {!authUser ? loginContent : <><aside className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 w-[248px] flex-col bg-[var(--surface)] border-r border-[var(--line)] p-4 overflow-y-auto">
+        <div className="flex items-center gap-2 px-1 py-1 mb-3"><span className="w-8 h-8 rounded-lg grid place-items-center text-white font-extrabold" style={{background:"#FF6B1A"}}>D</span><span className="font-extrabold text-[15px]">Dojo Checklist</span></div>
+        <p className="px-2 text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)] mb-1">Operação</p>
+        {navItems.map(n=>{ const active=tab===n.id; return <button key={n.id} onClick={()=>{setTab(n.id); setShowTodayDone(false); if(n.id!=="chat") setConversation(null);}} className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold ${active?"bg-[var(--primary)] text-white":"hover:bg-[var(--line)]"}`}><n.icon size={16}/>{n.label}</button>; })}
+        {isManager && <><p className="px-2 mt-4 text-[11px] font-extrabold uppercase tracking-wider text-[var(--muted)] mb-1">Gerência</p>
+        {dashNav.map(d=>{ const active=tab==="overview"&&dashTab===d.id; return <button key={d.id} onClick={()=>{setTab("overview"); setDashTab(d.id);}} className={`flex items-center gap-2 w-full text-left px-3 py-2 rounded-lg text-[13px] font-bold ${active?"bg-[var(--primary)] text-white":"hover:bg-[var(--line)]"}`}><d.icon size={16}/>{d.label}</button>; })}</>}
+        {/*SIDB2*/}
+      </aside><div className="lg:pl-[248px]">
     {!isChatDetail && <header data-safe-area-sticky-top style={{top:"var(--safe-area-inset-top)"}} className="app-header sticky z-30 border-b border-[var(--line)]">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
         <span className="hidden sm:grid w-10 h-10 rounded-full place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
