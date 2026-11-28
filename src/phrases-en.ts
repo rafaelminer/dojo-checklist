@@ -181,6 +181,7 @@ export const en: Record<string, string> = {
   "Resumo da Semana": "Weekly Summary",
   "Parecer automático": "Automatic summary",
   "Modo guiado": "Guided mode",
+  "Resultado": "Score",
   "Executar no modo guiado": "Run in guided mode",
   "Nota final": "Final score",
   "Média ponderada dos critérios · Conforme ≥ 7,5 · Parcial ≥ 5": "Weighted average · Compliant ≥ 7.5 · Partial ≥ 5",
