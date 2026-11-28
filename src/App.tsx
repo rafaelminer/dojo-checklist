@@ -313,6 +313,8 @@ export default function App(){
   const guidedActiveSection = guidedSection || guidedSectionOptions[0];
   const guidedQs = questions.filter((q:any)=>q.value?.question&&(guidedActiveSection==="All sections"||q.value.section===guidedActiveSection));
   const guidedSteps:any[] = guidedQs.map((q:any)=>({id:q.id,question:q.value.question,section:q.value.section||"Geral",type:q.value.type||"check",weight:Number(q.value.weight)||1,minScore:Number(q.value.minScore)||7.5,ref:q.value.referencePhoto||""}));
+  const guidedStepNow:any = guidedSteps[guidedStep];
+  const guidedAnswer:any = guidedAnswers[guidedStepNow?.id]||{verdict:"Conforme",score:0,answer:"",note:"",photo:"",opinion:""};
   const units = useMemo(()=> Array.from(new Set(["Matriz",...credentials.map(c=>c.value.unit).filter(Boolean)])) as string[], [credentials]);
   const staffProfiles = useMemo(()=> Array.from(new Set([...STAFF_PROFILES.filter(p=>!replacedProfiles.has(p)), ...credentials.map(c=>c.value.profile)])).filter(p=>p!=="Gerência"),[credentials,replacedProfiles]);
   const stationMap = useMemo<Record<string,string>>(()=> { const m={...STATIONS}; replacedProfiles.forEach(p=>delete m[p]); credentials.filter(c=>c.value.station).forEach(c=>{ m[c.value.profile]=c.value.station!; }); return m; },[credentials,replacedProfiles]);
