@@ -2053,7 +2053,7 @@ export default function App(){
   const navItems = [{id:"checklist" as Tab,label:t("navChecklist"),icon:ClipboardCheck},{id:"chat" as Tab,label:t("navChat"),icon:MessageCircle},{id:"overview" as Tab,label:t("navOverview"),icon:LayoutDashboard},{id:"modules" as Tab,label:t("navModules"),icon:CalendarDays}].filter(t=> isManager ? t.id!=="checklist" : t.id!=="overview");
 
   return <Suspense fallback={<div className="min-h-[100dvh] grid place-items-center text-[13px] font-bold text-[var(--muted)]">Carregando…</div>}><div data-safe-area-inset-root className="app-shell overflow-x-clip" style={{boxSizing:"border-box",paddingTop:"var(--safe-area-inset-top)",minHeight:"100dvh"}}>
-    {!authUser ? loginContent : <><div className="lg:pl-[248px]">
+    {!authUser ? loginContent : <><aside className="hidden lg:flex fixed left-0 top-0 bottom-0 z-40 w-[248px] flex-col bg-[var(--surface)] border-r border-[var(--line)] p-4 overflow-y-auto">{/*SIDEBAR*/}</aside><div className="lg:pl-[248px]">
     {!isChatDetail && <header data-safe-area-sticky-top style={{top:"var(--safe-area-inset-top)"}} className="app-header sticky z-30 border-b border-[var(--line)]">
       <div className="max-w-6xl mx-auto px-3 sm:px-6 py-2 sm:py-3 flex items-center gap-2 sm:gap-3">
         <span className="hidden sm:grid w-10 h-10 rounded-full place-items-center text-white font-extrabold shrink-0" style={{background:avatarColor(authUser)}}>{initials(authUser)}</span>
