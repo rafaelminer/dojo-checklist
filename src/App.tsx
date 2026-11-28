@@ -2174,6 +2174,60 @@ export default function App(){
     />}
     <QrModal open={stationQrOpen} title={t("QR por estação")} label={stationQrInfo.label} description="Imprima ou cole na estação. Ao escanear, o app abre com o login dessa pessoa já preenchido." url={stationQrInfo.url} canvasRef={stationQrCanvasRef} onClose={()=>setStationQrOpen(false)} />
     {cameraQuestion && <CameraGuide reference={questions.find(q=>q.id===cameraQuestion)?.value.referencePhoto} onCapture={data=>setQualityDraft(p=>({...p,[cameraQuestion]:{...p[cameraQuestion],photo:data}}))} onClose={()=>setCameraQuestion(null)} />}
+    {guidedCameraOpen && guidedStepNow && <CameraGuide reference={guidedStepNow.ref} onCapture={data=>{ setGuidedAnswer({photo:data}); setGuidedCameraOpen(false); }} onClose={()=>setGuidedCameraOpen(false)} />}
+    {guidedOpen && <div className="fixed inset-0 z-[60] overflow-y-auto bg-black/80" role="dialog" aria-modal="true" aria-label={t("Modo guiado")}>
+      <div className="min-h-full flex items-start sm:items-center justify-center p-0 sm:p-4">
+        <div className="w-full sm:max-w-[560px] bg-[var(--surface)] border border-[var(--line)] sm:rounded-2xl min-h-[100dvh] sm:min-h-0 sm:my-4">
+          {!guidedResult && <>
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-[var(--line)] sticky top-0 bg-[var(--surface)] z-10">
+              <button onClick={()=>setGuidedOpen(false)} aria-label={t("Fechar aviso")} className="opacity-70"><X size={18}/></button>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="font-extrabold text-[15px]">{t("Modo guiado")}</p>
+                <p className="text-[12px] text-[var(--muted)]">{guidedActiveSection} · {guidedStep+1}/{guidedSteps.length}</p>
+              </div>
+              <span className="text-[13px] font-extrabold" style={{color:guidedScore>=7.5?"#25D366":guidedScore>=5?"#FF6B1A":"#F04438"}}>{guidedScore.toFixed(1)}</span>
+            </div>
+            <div className="h-1.5 bg-[var(--line)]"><div className="h-full transition-all" style={{width:`${guidedSteps.length?((guidedStep+1)/guidedSteps.length)*100:0}%`,background:"#FF6B1A"}}/></div>
+            <div className="px-4 py-3 border-b border-[var(--line)] flex items-center gap-2">
+              <span className="text-[12px] font-bold text-[var(--muted)]">{t("Seção")}</span>
+              <select value={guidedSection} onChange={e=>{setGuidedSection(e.target.value); setGuidedStep(0);}} className="field !mt-0 !w-auto flex-1" aria-label={t("Seção")}>{guidedSectionOptions.map(o=><option key={o} value={o==="All sections"?"":o}>{o}</option>)}</select>
+            </div>
+            {guidedSteps.length===0 && <div className="p-6 text-center text-[13px] text-[var(--muted)]">Nenhuma pergunta cadastrada para este filtro. Peça à Gerência para criar perguntas de auditoria.</div>}
+            {guidedSteps.length>0 && guidedStepNow && <div className="p-4 pb-28">
+              <p className="text-[12px] font-extrabold uppercase tracking-wider text-[var(--muted)]">{guidedStepNow.section}</p>
+              <h2 className="font-extrabold text-[20px] leading-snug mt-1">{guidedStepNow.question}</h2>
+              {(guidedStepNow.type==="check"||guidedStepNow.type==="photo"||guidedStepNow.type==="foto_veredito") && <div className="flex gap-2 mt-4">{["Conforme","Parcial","Não conforme"].map(v=><button key={v} onClick={()=>setGuidedAnswer({verdict:v})} className={`flex-1 py-3 rounded-xl font-extrabold text-[13px] border ${guidedAnswer.verdict===v?"text-white":"border-[var(--line)]"}`} style={guidedAnswer.verdict===v?{background:v==="Conforme"?"#25D366":v==="Parcial"?"#FF6B1A":"#F04438",borderColor:"transparent"}:{}}>{v}</button>)}</div>}
+              {guidedStepNow.type==="sim_nao" && <div className="flex gap-2 mt-4">{["Sim","Não"].map(v=><button key={v} onClick={()=>setGuidedAnswer({answer:v,verdict:v==="Sim"?"Conforme":"Não conforme"})} className={`flex-1 py-3 rounded-xl font-extrabold text-[13px] border ${guidedAnswer.answer===v?"text-white":"border-[var(--line)]"}`} style={guidedAnswer.answer===v?{background:v==="Sim"?"#25D366":"#F04438",borderColor:"transparent"}:{}}>{v}</button>)}</div>}
+              {(guidedStepNow.type==="multipla"||guidedStepNow.type==="classificacao") && <div className="flex flex-col gap-2 mt-4">{String(guidedStepNow.options||"").split(/[;,\n]/).map((o:string)=>o.trim()).filter(Boolean).map((o:string)=><button key={o} onClick={()=>setGuidedAnswer({answer:o,verdict:o===guidedStepNow.correct?"Conforme":"Parcial"})} className={`py-3 rounded-xl font-bold text-[13px] border text-left px-4 ${guidedAnswer.answer===o?"bg-[var(--primary)] text-white border-transparent":"border-[var(--line)]"}`}>{o}</button>)}</div>}
+              {(guidedStepNow.type==="numero"||guidedStepNow.type==="temperature") && <input inputMode="decimal" value={guidedAnswer.answer} onChange={e=>setGuidedAnswer({answer:e.target.value})} placeholder={guidedStepNow.type==="temperature"?"Ex.: 4.5":"Ex.: 12"} className="field !mt-4" aria-label={guidedStepNow.question} />}
+              {guidedStepNow.type==="data" && <input type="date" value={guidedAnswer.answer} onChange={e=>setGuidedAnswer({answer:e.target.value})} className="field !mt-4" aria-label={guidedStepNow.question} />}
+              {guidedStepNow.type==="hora" && <input type="time" value={guidedAnswer.answer} onChange={e=>setGuidedAnswer({answer:e.target.value})} className="field !mt-4" aria-label={guidedStepNow.question} />}
+              {(guidedStepNow.type==="text"||guidedStepNow.type==="texto_veredito") && <textarea value={guidedAnswer.note} onChange={e=>setGuidedAnswer({note:e.target.value})} rows={3} placeholder="Escreva a observação…" className="field !mt-4" aria-label={guidedStepNow.question} />}
+              {(guidedStepNow.type==="photo"||guidedStepNow.type==="foto_veredito") && <div className="mt-4">{guidedAnswer.photo ? <div className="relative"><img src={guidedAnswer.photo} alt="Captura" className="w-full h-40 object-cover rounded-xl border border-[var(--line)]"/><button onClick={()=>setGuidedAnswer({photo:""})} className="absolute top-2 right-2 bg-black/70 text-white text-[12px] font-bold px-2 py-1 rounded-lg">Excluir foto</button></div> : <button onClick={()=>setGuidedCameraOpen(true)} className="w-full py-3 rounded-xl font-extrabold text-[13px] border border-[var(--line)]">Abrir câmera com guia</button>}</div>}
+              {guidedStepNow.ref && guidedAnswer.photo && <div className="mt-3"><p className="text-[11px] text-[var(--muted)]">{t("Referência")} vs captura</p><div className="grid grid-cols-2 gap-2 mt-1"><img src={guidedStepNow.ref} alt="Referência" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]"/><img src={guidedAnswer.photo} alt="Captura" className="w-full h-24 object-cover rounded-xl border border-[var(--line)]"/></div></div>}
+              {guidedStepNow.hint && <p className="text-[12px] text-[var(--muted)] mt-3">{guidedStepNow.hint}</p>}
+            </div>}
+            {guidedSteps.length>0 && <div className="sticky bottom-0 bg-[var(--surface)] border-t border-[var(--line)] p-3 flex gap-2" style={{paddingBottom:"calc(12px + env(safe-area-inset-bottom))"}}>
+              <button onClick={()=>setGuidedStep(s=>Math.max(0,s-1))} disabled={guidedStep===0} className="px-4 py-3 rounded-xl font-extrabold text-[13px] border border-[var(--line)] disabled:opacity-40">Voltar</button>
+              {guidedStep<guidedSteps.length-1
+                ? <button onClick={()=>setGuidedStep(s=>s+1)} className="flex-1 py-3 rounded-xl font-extrabold text-[13px] text-white" style={{background:"#FF6B1A"}}>Avançar</button>
+                : <button onClick={()=>void saveGuidedRun()} disabled={guidedSaving} className="flex-1 py-3 rounded-xl font-extrabold text-[13px] text-white disabled:opacity-60" style={{background:"#25D366"}}>{guidedSaving?"Salvando…":"Ver nota final"}</button>}
+            </div>}
+          </>}
+          {guidedResult && <div className="p-6 text-center">
+            <p className="text-[12px] font-extrabold uppercase tracking-wider text-[var(--muted)]">{t("Resultado")}</p>
+            <p className="font-extrabold text-[56px] leading-none mt-2" style={{color:guidedScore>=7.5?"#25D366":guidedScore>=5?"#FF6B1A":"#F04438"}}>{guidedScore.toFixed(1)}</p>
+            <p className="font-extrabold text-[18px] mt-1">{guidedVerdict}</p>
+            <p className="text-[13px] text-[var(--muted)] mt-1">{guidedSteps.length} perguntas · {guidedActiveSection}</p>
+            <div className="mt-4 text-left space-y-2 max-h-[45dvh] overflow-y-auto">{guidedSteps.map(st=>{ const a=guidedAnswers[st.id]||{}; const s=guidedScoreFor(st,a); return <div key={st.id} className="flex items-start gap-2 text-[13px] border-b border-[var(--line)] pb-2"><span className="min-w-0 flex-1">{st.question}</span><span className="font-extrabold" style={{color:s>=7.5?"#25D366":s>=5?"#FF6B1A":"#F04438"}}>{s.toFixed(1)}</span></div>; })}</div>
+            <div className="flex gap-2 mt-5">
+              <button onClick={()=>{ setGuidedResult(false); setGuidedStep(0); setGuidedAnswers({}); }} className="flex-1 py-3 rounded-xl font-extrabold text-[13px] border border-[var(--line)]">Refazer</button>
+              <button onClick={()=>setGuidedOpen(false)} className="flex-1 py-3 rounded-xl font-extrabold text-[13px] text-white" style={{background:"#FF6B1A"}}>{t("Concluir")}</button>
+            </div>
+          </div>}
+        </div>
+      </div>
+    </div>}
     {authUser && toast && <div className="fixed inset-x-0 z-[70] px-3 pointer-events-none" style={{bottom:"calc(172px + var(--safe-area-inset-bottom))"}}><div className="toast pointer-events-auto max-w-[440px] mx-auto" role="status"><Check size={17} className="shrink-0"/><span className="min-w-0 flex-1">{toast.text}</span>{toast.undo && <button onClick={()=>{toast.undo?.();setToast(null);}} className="shrink-0 font-extrabold underline">{t("Desfazer")}</button>}<button onClick={()=>setToast(null)} aria-label="Fechar aviso" className="shrink-0 opacity-60"><X size={15}/></button></div></div>}
   </div></Suspense>;
 }
