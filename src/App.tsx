@@ -297,6 +297,7 @@ export default function App(){
   useEffect(()=>{ if(!toast) return; const t=setTimeout(()=>setToast(null),5200); return ()=>clearTimeout(t); },[toast]);
   useEffect(()=>{ if(msg && authUser) setToast({text:msg}); },[msg,authUser]);
   useEffect(()=>{ const onKey=(ev:KeyboardEvent)=>{ if(ev.key==="Escape") setPhotoViewer(null); }; window.addEventListener("keydown",onKey); return ()=>window.removeEventListener("keydown",onKey); },[]);
+  useEffect(()=>{ if(!guidedOpen) return; setGuidedStep(0); setGuidedAnswers({}); setGuidedResult(false); },[guidedOpen]);
   const [reproveFor,setReproveFor]=useState<{text:string; person:string; sectionText:string}|null>(null);
   const [obsDrafts,setObsDrafts]=useState<Record<string,string>>({});
   const [reproveNote,setReproveNote]=useState("");
@@ -659,6 +660,19 @@ export default function App(){
   const guidedSteps:any[] = guidedQs.map((q:any)=>({id:q.id,question:q.value.question,section:q.value.section||"Geral",type:q.value.type||"check",weight:Number(q.value.weight)||1,minScore:Number(q.value.minScore)||7.5,ref:q.value.referencePhoto||""}));
   const guidedStepNow:any = guidedSteps[guidedStep];
   const guidedAnswer:any = guidedAnswers[guidedStepNow?.id]||{verdict:"Conforme",score:0,answer:"",note:"",photo:"",opinion:""};
+  const setGuidedAnswer = (patch:any)=>{ if(!guidedStepNow) return; setGuidedAnswers(p=>({...p,[guidedStepNow.id]:{...guidedAnswer,...patch}})); };
+  const guidedScoreFor = (st:any,ans:any):number=>{
+    if(!st) return 0;
+    if(st.type==="check"||st.type==="yesno"||st.type==="photo") return ans.verdict==="Não conforme"?0:ans.verdict==="Parcial"?5:10;
+    if(st.type==="scale") return Math.max(0,Math.min(10,Number(ans.score)||0));
+    const v=Number(String(ans.answer??"").replace(",","."));
+    if(!Number.isFinite(v)) return 0;
+    if(st.type==="temperature") return v<=st.minScore?10:v<=st.minScore+3?5:0;
+    if(st.type==="temperature_min") return v>=st.minScore?10:v>=st.minScore-3?5:0;
+    return ans.verdict==="Não conforme"?0:ans.verdict==="Parcial"?5:10;
+  };
+  const guidedScore = guidedSteps.length? Math.round(guidedSteps.reduce((sum,st)=>sum+guidedScoreFor(st,guidedAnswers[st.id]||{})*(Number(st.weight)||1),0)/guidedSteps.reduce((sum,st)=>sum+(Number(st.weight)||1),0)*10)/10 : 0;
+  const guidedVerdict = guidedScore>=7.5?"Conforme":guidedScore>=5?"Parcialmente conforme":"Não conforme";
   const itemsForSection = (sec:Section) => items.filter(i=> i.section===sec && (sec!=="Produção" || isKioskSelected || i.freq===period));
   const submissionForSection = (sec:Section) => {
     return Object.values(submissions).filter(s=>s.value.profile===selected && s.value.date===date && s.value.section===sec && (sec!=="Produção" || s.value.period===period)).sort((a,b)=>b.id.localeCompare(a.id))[0] || null;
